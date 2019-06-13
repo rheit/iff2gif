@@ -25,13 +25,13 @@
 
 #include "iff2gif.h"
 
-static const UWORD *Do8short(UWORD *pixel, UWORD *stop, const UWORD *ops, UWORD xormask, int pitch);
+static const uint16_t *Do8short(uint16_t *pixel, uint16_t *stop, const uint16_t *ops, uint16_t xormask, int pitch);
 
-IFFChunk::IFFChunk(FILE *file, ULONG id, ULONG len)
+IFFChunk::IFFChunk(FILE *file, uint32_t id, uint32_t len)
 {
 	ChunkID = id;
 	ChunkLen = len;
-	ChunkData = new UBYTE[len];
+	ChunkData = new uint8_t[len];
 
 	size_t bytesread = fread(ChunkData, 1, len, file);
 	if (bytesread != len)
@@ -66,7 +66,7 @@ FORMReader::FORMReader(_TCHAR *filename, FILE *file)
 	Pos = 4;	// Length includes the FORM ID
 }
 
-FORMReader::FORMReader(_TCHAR *filename, FILE *file, ULONG len)
+FORMReader::FORMReader(_TCHAR *filename, FILE *file, uint32_t len)
 {
 	File = file;
 	Filename = filename;
@@ -80,7 +80,7 @@ FORMReader::~FORMReader()
 {
 	// Seek to end of FORM, so we're ready to read more data if it was
 	// inside a container.
-	ULONG len = FormLen + (FormLen & 1);
+	uint32_t len = FormLen + (FormLen & 1);
 	if (Pos != len)
 	{
 		fseek(File, len - Pos, SEEK_CUR);
@@ -109,11 +109,11 @@ bool FORMReader::NextChunk(IFFChunk **chunk, FORMReader **form)
 
 	if (Pos < FormLen)
 	{
-		ULONG chunkhead[2];	// ID, Len
+		uint32_t chunkhead[2];	// ID, Len
 		if (fread(chunkhead, 4, 2, File) == 2)
 		{
-			ULONG id = chunkhead[0];
-			ULONG len = BigLong(chunkhead[1]);
+			uint32_t id = chunkhead[0];
+			uint32_t len = BigLong(chunkhead[1]);
 
 			Pos += len + (len & 1) + 8;
 			if (id == ID_FORM)
@@ -184,10 +184,10 @@ void MakeEHBPalette(PlanarBitmap *planes)
 	}
 }
 
-void UnpackBody(PlanarBitmap *planes, BitmapHeader &header, ULONG len, const void *data)
+void UnpackBody(PlanarBitmap *planes, BitmapHeader &header, uint32_t len, const void *data)
 {
-	const BYTE *in = (const BYTE *)data;
-	//const BYTE *end = in + len;
+	const int8_t *in = (const int8_t *)data;
+	//const int8_t *end = in + len;
 	// The mask plane is interleaved after the bitmap planes, so we need to count
 	// it as another plane when reading.
 	int nplanes = header.nPlanes + (header.masking == mskHasMask);
@@ -246,31 +246,31 @@ void UnpackBody(PlanarBitmap *planes, BitmapHeader &header, ULONG len, const voi
 }
 
 // Byte vertical delta: Probably the most common case by far
-void Delta5(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *delta)
+void Delta5(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
-	const ULONG *planes = (const ULONG *)delta;
+	const uint32_t *planes = (const uint32_t *)delta;
 	int numcols = (bitmap->Width + 7) / 8;
 	int pitch = bitmap->Pitch;
-	const UBYTE xormask = (head->bits & ANIM_XOR) ? 0xFF : 0x00;
+	const uint8_t xormask = (head->bits & ANIM_XOR) ? 0xFF : 0x00;
 	for (int p = 0; p < bitmap->NumPlanes; ++p)
 	{
-		ULONG ptr = BigLong(planes[p]);
+		uint32_t ptr = BigLong(planes[p]);
 		if (ptr == 0)
 		{ // No ops for this plane.
 			continue;
 		}
-		const UBYTE *ops = (const UBYTE *)delta + ptr;
+		const uint8_t *ops = (const uint8_t *)delta + ptr;
 		for (int x = 0; x < numcols; ++x)
 		{
-			UBYTE *pixel = bitmap->Planes[p] + x;
-			UBYTE *stop = pixel + bitmap->Height * pitch;
-			UBYTE opcount = *ops++;
+			uint8_t *pixel = bitmap->Planes[p] + x;
+			uint8_t *stop = pixel + bitmap->Height * pitch;
+			uint8_t opcount = *ops++;
 			while (opcount-- > 0)
 			{
-				UBYTE op = *ops++;
+				uint8_t op = *ops++;
 				if (op & 0x80)
 				{ // Uniq op: copy data literally
-					UBYTE cnt = op & 0x7F;
+					uint8_t cnt = op & 0x7F;
 					while (cnt-- > 0)
 					{
 						if (pixel < stop)
@@ -283,8 +283,8 @@ void Delta5(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *delta
 				}
 				else if (op == 0)
 				{ // Same op: copy one byte to several rows
-					UBYTE cnt = *ops++;
-					UBYTE fill = *ops++;
+					uint8_t cnt = *ops++;
+					uint8_t fill = *ops++;
 					while (cnt-- > 0)
 					{
 						if (pixel < stop)
@@ -304,32 +304,32 @@ void Delta5(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *delta
 }
 
 // Short vertical delta using separate op and data lists
-void Delta7Short(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *delta)
+void Delta7Short(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
-	const ULONG *lists = (const ULONG *)delta;
+	const uint32_t *lists = (const uint32_t *)delta;
 	int numcols = (bitmap->Width + 15) / 16;
 	int pitch = bitmap->Pitch / 2;
-	const UWORD xormask = (head->bits & ANIM_XOR) ? 0xFFFF : 0x00;
+	const uint16_t xormask = (head->bits & ANIM_XOR) ? 0xFFFF : 0x00;
 	for (int p = 0; p < bitmap->NumPlanes; ++p)
 	{
-		ULONG opptr = BigLong(lists[p]);
+		uint32_t opptr = BigLong(lists[p]);
 		if (opptr == 0)
 		{ // No ops for this plane.
 			continue;
 		}
-		const UWORD *data = (const UWORD *)((const UBYTE *)delta + BigLong(lists[p + 8]));
-		const UBYTE *ops = (const UBYTE *)delta + opptr;
+		const uint16_t *data = (const uint16_t *)((const uint8_t *)delta + BigLong(lists[p + 8]));
+		const uint8_t *ops = (const uint8_t *)delta + opptr;
 		for (int x = 0; x < numcols; ++x)
 		{
-			UWORD *pixels = (UWORD *)bitmap->Planes[p] + x;
-			UWORD *stop = pixels + bitmap->Height * pitch;
-			UBYTE opcount = *ops++;
+			uint16_t *pixels = (uint16_t *)bitmap->Planes[p] + x;
+			uint16_t *stop = pixels + bitmap->Height * pitch;
+			uint8_t opcount = *ops++;
 			while (opcount-- > 0)
 			{
-				UBYTE op = *ops++;
+				uint8_t op = *ops++;
 				if (op & 0x80)
 				{ // Uniq op: copy data literally
-					UBYTE cnt = op & 0x7F;
+					uint8_t cnt = op & 0x7F;
 					while (cnt-- > 0)
 					{
 						if (pixels < stop)
@@ -342,8 +342,8 @@ void Delta7Short(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *
 				}
 				else if (op == 0)
 				{ // Same op: copy one byte to several rows
-					UBYTE cnt = *ops++;
-					UWORD fill = *data++;
+					uint8_t cnt = *ops++;
+					uint16_t fill = *data++;
 					while (cnt-- > 0)
 					{
 						if (pixels < stop)
@@ -363,60 +363,60 @@ void Delta7Short(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *
 }
 
 // Long vertical delta using separate op and data lists
-void Delta7Long(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *delta)
+void Delta7Long(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
 	// ILBMs are only padded to 16 pixel widths, so what happens when the image
 	// needs to be padded to 32 pixels for long data but isn't? The spec doesn't say.
-	const ULONG *lists = (const ULONG *)delta;
+	const uint32_t *lists = (const uint32_t *)delta;
 	int numcols = (bitmap->Width + 15) / 32;
 	int pitch = bitmap->Pitch;
-	const ULONG xormask = (head->bits & ANIM_XOR) ? 0xFFFF : 0x00;
+	const uint32_t xormask = (head->bits & ANIM_XOR) ? 0xFFFF : 0x00;
 	for (int p = 0; p < bitmap->NumPlanes; ++p)
 	{
-		ULONG opptr = BigLong(lists[p]);
+		uint32_t opptr = BigLong(lists[p]);
 		if (opptr == 0)
 		{ // No ops for this plane.
 			continue;
 		}
-		const ULONG *data = (const ULONG *)((const UBYTE *)delta + BigLong(lists[p + 8]));
-		const UBYTE *ops = (const UBYTE *)delta + opptr;
+		const uint32_t *data = (const uint32_t *)((const uint8_t *)delta + BigLong(lists[p + 8]));
+		const uint8_t *ops = (const uint8_t *)delta + opptr;
 		for (int x = 0; x < numcols; ++x)
 		{
-			ULONG *pixels = (ULONG *)bitmap->Planes[p] + x;
-			ULONG *stop = (ULONG *)((UBYTE *)pixels + bitmap->Height * pitch);
-			UBYTE opcount = *ops++;
+			uint32_t *pixels = (uint32_t *)bitmap->Planes[p] + x;
+			uint32_t *stop = (uint32_t *)((uint8_t *)pixels + bitmap->Height * pitch);
+			uint8_t opcount = *ops++;
 			while (opcount-- > 0)
 			{
-				UBYTE op = *ops++;
+				uint8_t op = *ops++;
 				if (op & 0x80)
 				{ // Uniq op: copy data literally
-					UBYTE cnt = op & 0x7F;
+					uint8_t cnt = op & 0x7F;
 					while (cnt-- > 0)
 					{
 						if (pixels < stop)
 						{
 							*pixels = (*pixels & xormask) ^ *data;
-							pixels = (ULONG *)((UBYTE *)pixels + pitch);
+							pixels = (uint32_t *)((uint8_t *)pixels + pitch);
 						}
 						data++;
 					}
 				}
 				else if (op == 0)
 				{ // Same op: copy one byte to several rows
-					UBYTE cnt = *ops++;
-					ULONG fill = *data++;
+					uint8_t cnt = *ops++;
+					uint32_t fill = *data++;
 					while (cnt-- > 0)
 					{
 						if (pixels < stop)
 						{
 							*pixels = (*pixels & xormask) ^ fill;
-							pixels = (ULONG *)((UBYTE *)pixels + pitch);
+							pixels = (uint32_t *)((uint8_t *)pixels + pitch);
 						}
 					}
 				}
 				else
 				{ // Skip op: Skip some rows
-					pixels = (ULONG *)((UBYTE *)pixels + op * pitch);
+					pixels = (uint32_t *)((uint8_t *)pixels + op * pitch);
 				}
 			}
 		}
@@ -424,38 +424,38 @@ void Delta7Long(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *d
 }
 
 // Short vertical delta using merged op and data lists, like op 5.
-void Delta8Short(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *delta)
+void Delta8Short(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
-	const ULONG *planes = (const ULONG *)delta;
+	const uint32_t *planes = (const uint32_t *)delta;
 	int numcols = (bitmap->Width + 15) / 16;
 	int pitch = bitmap->Pitch / 2;
-	const UWORD xormask = (head->bits & ANIM_XOR) ? 0xFF : 0x00;
+	const uint16_t xormask = (head->bits & ANIM_XOR) ? 0xFF : 0x00;
 	for (int p = 0; p < bitmap->NumPlanes; ++p)
 	{
-		ULONG ptr = BigLong(planes[p]);
+		uint32_t ptr = BigLong(planes[p]);
 		if (ptr == 0)
 		{ // No ops for this plane.
 			continue;
 		}
-		const UWORD *ops = (const UWORD *)delta + ptr;
+		const uint16_t *ops = (const uint16_t *)delta + ptr;
 		for (int x = 0; x < numcols; ++x)
 		{
-			UWORD *pixel = (UWORD *)(bitmap->Planes[p] + x);
-			UWORD *stop = pixel + bitmap->Height * pitch;
+			uint16_t *pixel = (uint16_t *)(bitmap->Planes[p] + x);
+			uint16_t *stop = pixel + bitmap->Height * pitch;
 			ops = Do8short(pixel, stop, ops, xormask, pitch);
 		}
 	}
 }
 
-static const UWORD *Do8short(UWORD *pixel, UWORD *stop, const UWORD *ops, UWORD xormask, int pitch)
+static const uint16_t *Do8short(uint16_t *pixel, uint16_t *stop, const uint16_t *ops, uint16_t xormask, int pitch)
 {
-	UWORD opcount = BigShort(*ops++);
+	uint16_t opcount = BigShort(*ops++);
 	while (opcount-- > 0)
 	{
-		UWORD op = BigShort(*ops++);
+		uint16_t op = BigShort(*ops++);
 		if (op & 0x8000)
 		{ // Uniq op: copy data literally
-			UWORD cnt = op & 0x7FFF;
+			uint16_t cnt = op & 0x7FFF;
 			while (cnt-- > 0)
 			{
 				if (pixel < stop)
@@ -468,8 +468,8 @@ static const UWORD *Do8short(UWORD *pixel, UWORD *stop, const UWORD *ops, UWORD 
 		}
 		else if (op == 0)
 		{ // Same op: copy one byte to several rows
-			UWORD cnt = BigShort(*ops++);
-			UWORD fill = *ops++;
+			uint16_t cnt = BigShort(*ops++);
+			uint16_t fill = *ops++;
 			while (cnt-- > 0)
 			{
 				if (pixel < stop)
@@ -490,70 +490,70 @@ static const UWORD *Do8short(UWORD *pixel, UWORD *stop, const UWORD *ops, UWORD 
 // Long vertical delta using merged op and data lists, like op 5.
 // The final column uses shorts instead of longs if the bitmap is
 // not an even number of 16-bit words wide.
-void Delta8Long(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *delta)
+void Delta8Long(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
-	const ULONG *planes = (const ULONG *)delta;
+	const uint32_t *planes = (const uint32_t *)delta;
 	int numcols = (bitmap->Width + 31) / 32;
 	int pitch = bitmap->Pitch;
 	bool lastisshort = (bitmap->Width & 16) != 0;
-	const UWORD xormask = (head->bits & ANIM_XOR) ? 0xFF : 0x00;
+	const uint16_t xormask = (head->bits & ANIM_XOR) ? 0xFF : 0x00;
 	for (int p = 0; p < bitmap->NumPlanes; ++p)
 	{
-		ULONG ptr = BigLong(planes[p]);
+		uint32_t ptr = BigLong(planes[p]);
 		if (ptr == 0)
 		{ // No ops for this plane.
 			continue;
 		}
-		const ULONG *ops = (const ULONG *)delta + ptr;
+		const uint32_t *ops = (const uint32_t *)delta + ptr;
 		for (int x = 0; x < numcols; ++x)
 		{
-			ULONG *pixel = (ULONG *)(bitmap->Planes[p] + x);
-			ULONG *stop = (ULONG *)((UBYTE *)pixel + bitmap->Height * pitch);
+			uint32_t *pixel = (uint32_t *)(bitmap->Planes[p] + x);
+			uint32_t *stop = (uint32_t *)((uint8_t *)pixel + bitmap->Height * pitch);
 			if (x == numcols - 1 && lastisshort)
 			{
-				Do8short((UWORD *)pixel, (UWORD *)stop, (UWORD *)ops, xormask, pitch / 2);
+				Do8short((uint16_t *)pixel, (uint16_t *)stop, (uint16_t *)ops, xormask, pitch / 2);
 				continue;
 			}
-			ULONG opcount = BigLong(*ops++);
+			uint32_t opcount = BigLong(*ops++);
 			while (opcount-- > 0)
 			{
-				ULONG op = BigLong(*ops++);
+				uint32_t op = BigLong(*ops++);
 				if (op & 0x80000000)
 				{ // Uniq op: copy data literally
-					ULONG cnt = op & 0x7FFFFFFF;
+					uint32_t cnt = op & 0x7FFFFFFF;
 					while (cnt-- > 0)
 					{
 						if (pixel < stop)
 						{
 							*pixel = (*pixel & xormask) ^ *ops;
-							pixel = (ULONG *)((UBYTE *)pixel + pitch);
+							pixel = (uint32_t *)((uint8_t *)pixel + pitch);
 						}
 						ops++;
 					}
 				}
 				else if (op == 0)
 				{ // Same op: copy one byte to several rows
-					ULONG cnt = BigLong(*ops++);
-					ULONG fill = *ops++;
+					uint32_t cnt = BigLong(*ops++);
+					uint32_t fill = *ops++;
 					while (cnt-- > 0)
 					{
 						if (pixel < stop)
 						{
 							*pixel = (*pixel & xormask) ^ fill;
-							pixel = (ULONG *)((UBYTE *)pixel + pitch);
+							pixel = (uint32_t *)((uint8_t *)pixel + pitch);
 						}
 					}
 				}
 				else
 				{ // Skip op: Skip some rows
-					pixel = (ULONG *)((UBYTE *)pixel + op * pitch);
+					pixel = (uint32_t *)((uint8_t *)pixel + op * pitch);
 				}
 			}
 		}
 	}
 }
 
-PlanarBitmap *ApplyDelta(PlanarBitmap *bitmap, AnimHeader *head, ULONG len, const void *delta)
+PlanarBitmap *ApplyDelta(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
 	bitmap->Interleave = 2 - (head->interleave & 1);
 	bitmap->Delay = head->reltime;
@@ -599,7 +599,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 	AnimHeader anheader;
 	IFFChunk *chunk;
 	int speed = -1;
-	ULONG modeid = 0;
+	uint32_t modeid = 0;
 	bool ocspal = false;
 
 	while (form.NextChunk(&chunk, NULL))
@@ -638,17 +638,17 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 
 		case ID_ANHD:
 		{
-			const UBYTE *ahdr = (const UBYTE *)chunk->GetData();
+			const uint8_t *ahdr = (const uint8_t *)chunk->GetData();
 			anheader.operation = ahdr[0];
 			anheader.mask = ahdr[1];
-			anheader.w = BigShort(*(UWORD *)(ahdr + 2));
-			anheader.h = BigShort(*(UWORD *)(ahdr + 4));
-			anheader.x = BigShort(*(WORD *)(ahdr + 6));
-			anheader.y = BigShort(*(WORD *)(ahdr + 8));
-			anheader.abstime = BigLong(*(ULONG *)(ahdr + 10));
-			anheader.reltime = BigLong(*(ULONG *)(ahdr + 14));
+			anheader.w = BigShort(*(uint16_t *)(ahdr + 2));
+			anheader.h = BigShort(*(uint16_t *)(ahdr + 4));
+			anheader.x = BigShort(*(int16_t *)(ahdr + 6));
+			anheader.y = BigShort(*(int16_t *)(ahdr + 8));
+			anheader.abstime = BigLong(*(uint32_t *)(ahdr + 10));
+			anheader.reltime = BigLong(*(uint32_t *)(ahdr + 14));
 			anheader.interleave = ahdr[18];
-			anheader.bits = BigLong(*(ULONG *)(ahdr + 20));
+			anheader.bits = BigLong(*(uint32_t *)(ahdr + 20));
 			if (anheader.interleave > 2)
 			{
 				fprintf(stderr, "Frame interleave of %u is more than 2\n", anheader.interleave);
@@ -686,7 +686,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 		}
 
 		case ID_CAMG:
-			modeid = BigLong(*(const ULONG *)chunk->GetData());
+			modeid = BigLong(*(const uint32_t *)chunk->GetData());
 			// Check for bogus CAMG like some brushes have, with junk in
 			// upper word and extended bit NOT set not set in lower word.
 			if ((modeid & 0xFFFF0000) && (!(modeid & EXTENDED_MODE)))
@@ -798,7 +798,7 @@ static void LoadANIM(FORMReader &form, GIFWriter &writer)
 
 void LoadFile(_TCHAR *filename, FILE *file, GIFWriter &writer)
 {
-	ULONG id = 0;
+	uint32_t id = 0;
 
 	if (fread(&id, 4, 1, file) == 1)
 	{
@@ -808,7 +808,7 @@ void LoadFile(_TCHAR *filename, FILE *file, GIFWriter &writer)
 			return;
 		}
 		FORMReader iff(filename, file);
-		ULONG id = iff.GetID();
+		uint32_t id = iff.GetID();
 		if (id == ID_ILBM)
 		{
 			PlanarBitmap *planar = LoadILBM(iff, NULL);

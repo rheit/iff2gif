@@ -41,7 +41,7 @@ PlanarBitmap::PlanarBitmap(int w, int h, int nPlanes)
 
 	// We always allocate at least 8 planes for faster planar to chunky conversion.
 	int realplanes = std::max(nPlanes, 8);
-	PlaneData = new UBYTE[Pitch * Height * realplanes];
+	PlaneData = new uint8_t[Pitch * Height * realplanes];
 	memset(PlaneData, 0, Pitch * Height * realplanes);
 
 	for (i = 0; i < nPlanes; ++i)
@@ -68,7 +68,7 @@ PlanarBitmap::PlanarBitmap(const PlanarBitmap &o)
 	Rate = o.Rate;
 
 	int realplanes = std::max(NumPlanes, 8);
-	PlaneData = new UBYTE[Pitch * Height * realplanes];
+	PlaneData = new uint8_t[Pitch * Height * realplanes];
 	memcpy(PlaneData, o.PlaneData, Pitch * Height * realplanes);
 	for (int i = 0; i < 32; ++i)
 	{
@@ -95,7 +95,7 @@ PlanarBitmap::~PlanarBitmap()
 void PlanarBitmap::FillBitplane(int plane, bool set)
 {
 	assert(plane >= 0 && plane < NumPlanes);
-	memset(Planes[plane], -(UBYTE)set, Pitch * Height);
+	memset(Planes[plane], -(uint8_t)set, Pitch * Height);
 }
 
 // Converts bitplanes to chunky pixels. The size of dest is selected based
@@ -113,14 +113,14 @@ void PlanarBitmap::ToChunky(void *dest)
 	else if (NumPlanes <= 8)
 	{
 #if 0
-		UBYTE *out = (UBYTE *)dest;
-		ULONG in = 0;
+		uint8_t *out = (uint8_t *)dest;
+		uint32_t in = 0;
 		for (int y = 0; y < Height; ++y)
 		{
 			for (int x = 0; x < Width; ++x)
 			{
 				int bit = 7 - (x & 7), byte = in + (x >> 3);
-				UBYTE pixel = 0;
+				uint8_t pixel = 0;
 				for (int i = NumPlanes - 1; i >= 0; --i)
 				{
 					pixel = (pixel << 1) | ((Planes[i][byte] >> bit) & 1);
@@ -130,8 +130,8 @@ void PlanarBitmap::ToChunky(void *dest)
 			in += Pitch;
 		}
 #else
-		UBYTE *out = (UBYTE *)dest;
-		ULONG in = 0;
+		uint8_t *out = (uint8_t *)dest;
+		uint32_t in = 0;
 		const int srcstep = Pitch * Height;
 		for (int x, y = 0; y < Height; ++y)
 		{
@@ -141,11 +141,11 @@ void PlanarBitmap::ToChunky(void *dest)
 				rotate8x8(PlaneData + in + x, srcstep, out, 1);
 			}
 			// Do overflow
-			ULONG byte = in + x;
+			uint32_t byte = in + x;
 			for (x <<= 3; x < Width; ++x)
 			{
 				const int bit = 7 - (x & 7);
-				UBYTE pixel = 0;
+				uint8_t pixel = 0;
 				for (int i = NumPlanes - 1; i >= 0; --i)
 				{
 					pixel = (pixel << 1) | ((Planes[i][byte] >> bit) & 1);
@@ -158,14 +158,14 @@ void PlanarBitmap::ToChunky(void *dest)
 	}
 	else if (NumPlanes <= 16)
 	{
-		UWORD *out = (UWORD *)dest;
-		ULONG in = 0;
+		uint16_t *out = (uint16_t *)dest;
+		uint32_t in = 0;
 		for (int y = 0; y < Height; ++y)
 		{
 			for (int x = 0; x < Width; ++x)
 			{
 				int bit = 7 - (x & 7), byte = in + (x >> 3);
-				UWORD pixel = 0;
+				uint16_t pixel = 0;
 				for (int i = NumPlanes - 1; i >= 0; --i)
 				{
 					pixel = (pixel << 1) | ((Planes[i][byte] >> bit) & 1);
@@ -177,14 +177,14 @@ void PlanarBitmap::ToChunky(void *dest)
 	}
 	else
 	{
-		ULONG *out = (ULONG *)dest;
-		ULONG in = 0;
+		uint32_t *out = (uint32_t *)dest;
+		uint32_t in = 0;
 		for (int y = 0; y < Height; ++y)
 		{
 			for (int x = 0; x < Width; ++x)
 			{
 				int bit = 7 - (x & 7), byte = in + (x >> 3);
-				ULONG pixel = 0;
+				uint32_t pixel = 0;
 				for (int i = NumPlanes - 1; i >= 0; --i)
 				{
 					pixel = (pixel << 1) | ((Planes[i][byte] >> bit) & 1);

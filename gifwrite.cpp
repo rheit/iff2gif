@@ -29,32 +29,32 @@
 class CodeStream
 {
 public:
-	CodeStream(UBYTE mincodesize, std::vector<UBYTE> &codes);
+	CodeStream(uint8_t mincodesize, std::vector<uint8_t> &codes);
 	~CodeStream();
-	void AddByte(UBYTE code);
-	void WriteCode(UWORD p);
+	void AddByte(uint8_t code);
+	void WriteCode(uint16_t p);
 	void Dump();
 
 private:
-	std::vector<UBYTE> &Codes;
-	ULONG Accum;
-	UWORD ClearCode;
-	UWORD EOICode;
-	UWORD NextCode;		// next code to assign
-	WORD Match;			// code of string matched so far
-	UBYTE CodeSize;		// in bits
-	UBYTE MinCodeSize;
-	BYTE BitPos;
-	UBYTE Chunk[256];	// first byte is length
-	typedef std::unordered_map<ULONG, UWORD> DictType;
+	std::vector<uint8_t> &Codes;
+	uint32_t Accum;
+	uint16_t ClearCode;
+	uint16_t EOICode;
+	uint16_t NextCode;		// next code to assign
+	int16_t Match;			// code of string matched so far
+	uint8_t CodeSize;		// in bits
+	uint8_t MinCodeSize;
+	int8_t BitPos;
+	uint8_t Chunk[256];	// first byte is length
+	typedef std::unordered_map<uint32_t, uint16_t> DictType;
 	DictType Dict;
 
 	void ResetDict();
 	void DumpAccum(bool full);
 };
 
-void LZWCompress(std::vector<UBYTE> &vec, const ImageDescriptor &imd, const UBYTE *prev, const UBYTE *chunky,
-	int pitch, UBYTE mincodesize, int trans);
+void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const uint8_t *prev, const uint8_t *chunky,
+	int pitch, uint8_t mincodesize, int trans);
 
 GIFWriter::GIFWriter(const _TCHAR *filename)
 {
@@ -104,7 +104,7 @@ void GIFWriter::BadWrite()
 
 void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 {
-	UBYTE *chunky = new UBYTE[bitmap->Width * bitmap->Height];
+	uint8_t *chunky = new uint8_t[bitmap->Width * bitmap->Height];
 	bitmap->ToChunky(chunky);
 	if (FrameCount == 0)
 	{
@@ -176,7 +176,7 @@ int GIFWriter::ExtendPalette(ColorRegister *dest, const ColorRegister *src, int 
 		return 0;
 	}
 	// What's the closest power of 2 the palette fits in?
-	UBYTE p = 1;
+	uint8_t p = 1;
 	while (1 << p < numsrc && p < 8)
 		++p;
 
@@ -195,7 +195,7 @@ int GIFWriter::ExtendPalette(ColorRegister *dest, const ColorRegister *src, int 
 	return p;
 }
 
-void GIFWriter::MakeFrame(PlanarBitmap *bitmap, UBYTE *chunky)
+void GIFWriter::MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky)
 {
 	GIFFrame newframe, *oldframe;
 
@@ -218,9 +218,9 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, UBYTE *chunky)
 		if (bitmap->Delay != 0)
 		{
 			// GIF timing is in 1/100 sec. ANIM timing is in multiples of an FPS clock.
-			ULONG tick = TotalTicks + bitmap->Delay;
-			ULONG lasttime = GIFTime;
-			ULONG nowtime = tick * 100 / FrameRate;
+			uint32_t tick = TotalTicks + bitmap->Delay;
+			uint32_t lasttime = GIFTime;
+			uint32_t nowtime = tick * 100 / FrameRate;
 			int delay = nowtime - lasttime;
 			oldframe->SetDelay(delay);
 			TotalTicks = tick;
@@ -259,7 +259,7 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, UBYTE *chunky)
 	// better if we don't do that.
 	if (trans >= 0)
 	{
-		std::vector<UBYTE> try2;
+		std::vector<uint8_t> try2;
 		LZWCompress(try2, newframe.IMD, PrevFrame, chunky, bitmap->Width, bitmap->NumPlanes, -1);
 		size_t l = newframe.LZW.size();
 		size_t r = try2.size();
@@ -286,7 +286,7 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, UBYTE *chunky)
 	PrevFrame = chunky;
 }
 
-void GIFWriter::DetectBackgroundColor(PlanarBitmap *bitmap, const UBYTE *chunky)
+void GIFWriter::DetectBackgroundColor(PlanarBitmap *bitmap, const uint8_t *chunky)
 {
 	// The GIF specification includes a background color. CompuServe probably actually
 	// used this. In practice, modern viewers just make the background be transparent
@@ -300,7 +300,7 @@ void GIFWriter::DetectBackgroundColor(PlanarBitmap *bitmap, const UBYTE *chunky)
 	{
 		BkgColor = bitmap->TransparentColor;
 		assert(PrevFrame == NULL);
-		PrevFrame = new UBYTE[bitmap->Width * bitmap->Height];
+		PrevFrame = new uint8_t[bitmap->Width * bitmap->Height];
 		memset(PrevFrame, BkgColor, bitmap->Width * bitmap->Height);
 	}
 	// Else, what the fuck ever. It doesn't matter.
@@ -310,11 +310,11 @@ void GIFWriter::DetectBackgroundColor(PlanarBitmap *bitmap, const UBYTE *chunky)
 	}
 }
 
-void GIFWriter::MinimumArea(const UBYTE *prev, const UBYTE *cur, ImageDescriptor &imd)
+void GIFWriter::MinimumArea(const uint8_t *prev, const uint8_t *cur, ImageDescriptor &imd)
 {
-	LONG start = -1;
-	LONG end = imd.Width * imd.Height;
-	LONG p;
+	int32_t start = -1;
+	int32_t end = imd.Width * imd.Height;
+	int32_t p;
 	int top, bot, left, right, x;
 
 	// Scan from beginning to find first changed pixel.
@@ -371,7 +371,7 @@ gotright:
 }
 
 // Select the disposal method for this frame.
-UBYTE GIFWriter::SelectDisposal(PlanarBitmap *planar, ImageDescriptor &imd, const UBYTE *chunky)
+uint8_t GIFWriter::SelectDisposal(PlanarBitmap *planar, ImageDescriptor &imd, const uint8_t *chunky)
 {
 	// If there is no transparent color, then we can keep the old frame intact.
 	if (planar->TransparentColor < 0 || PrevFrame == NULL)
@@ -381,9 +381,9 @@ UBYTE GIFWriter::SelectDisposal(PlanarBitmap *planar, ImageDescriptor &imd, cons
 	// If no pixels are being changed to a transparent color, we can keep the old frame intact.
 	// Otherwise, we must dispose it to the background color, since that's the only way to
 	// set a pixel transparent after it's been rendered opaque.
-	const UBYTE *src = PrevFrame + imd.Left + imd.Top * planar->Width;
-	const UBYTE *dest = chunky + imd.Left + imd.Top * planar->Width;
-	const UBYTE trans = planar->TransparentColor;
+	const uint8_t *src = PrevFrame + imd.Left + imd.Top * planar->Width;
+	const uint8_t *dest = chunky + imd.Left + imd.Top * planar->Width;
+	const uint8_t trans = planar->TransparentColor;
 	for (int y = 0; y < imd.Height; ++y)
 	{
 		for (int x = 0; x < imd.Width; ++x)
@@ -407,10 +407,10 @@ UBYTE GIFWriter::SelectDisposal(PlanarBitmap *planar, ImageDescriptor &imd, cons
 // Compares pixels in the changed region and returns a color that is not used in the destination.
 // This can be used as a transparent color for this frame for better compression, since the
 // underlying unchanged pixels can be collapsed into a run of a single color.
-int GIFWriter::SelectTransparentColor(const UBYTE *prev, const UBYTE *now, const ImageDescriptor &imd, int pitch)
+int GIFWriter::SelectTransparentColor(const uint8_t *prev, const uint8_t *now, const ImageDescriptor &imd, int pitch)
 {
-	UBYTE used[256 / 8] = { 0 };
-	UBYTE c;
+	uint8_t used[256 / 8] = { 0 };
+	uint8_t c;
 
 	prev += imd.Left + imd.Top * pitch;
 	now += imd.Left + imd.Top * pitch;
@@ -446,8 +446,8 @@ int GIFWriter::SelectTransparentColor(const UBYTE *prev, const UBYTE *now, const
 	return -1;
 }
 
-void LZWCompress(std::vector<UBYTE> &vec, const ImageDescriptor &imd, const UBYTE *prev, const UBYTE *chunky,
-	int pitch, UBYTE mincodesize, int trans)
+void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const uint8_t *prev, const uint8_t *chunky,
+	int pitch, uint8_t mincodesize, int trans)
 {
 	if (mincodesize < 2)
 	{
@@ -455,7 +455,7 @@ void LZWCompress(std::vector<UBYTE> &vec, const ImageDescriptor &imd, const UBYT
 	}
 	vec.push_back(mincodesize);
 	CodeStream codes(mincodesize, vec);
-	const UBYTE *in = chunky + imd.Left + imd.Top * pitch;
+	const uint8_t *in = chunky + imd.Left + imd.Top * pitch;
 	if (trans < 0)
 	{
 		for (int y = 0; y < imd.Height; ++y)
@@ -469,7 +469,7 @@ void LZWCompress(std::vector<UBYTE> &vec, const ImageDescriptor &imd, const UBYT
 	}
 	else
 	{
-		const UBYTE transcolor = trans;
+		const uint8_t transcolor = trans;
 		prev += imd.Left + imd.Top * pitch;
 		for (int y = 0; y < imd.Height; ++y)
 		{
@@ -483,7 +483,7 @@ void LZWCompress(std::vector<UBYTE> &vec, const ImageDescriptor &imd, const UBYT
 	}
 }
 
-CodeStream::CodeStream(UBYTE mincodesize, std::vector<UBYTE> &codes)
+CodeStream::CodeStream(uint8_t mincodesize, std::vector<uint8_t> &codes)
 	: Codes(codes)
 {
 	assert(mincodesize >= 2);
@@ -520,7 +520,7 @@ void CodeStream::Dump()
 	}
 }
 
-void CodeStream::WriteCode(UWORD code)
+void CodeStream::WriteCode(uint16_t code)
 {
 	Accum |= code << BitPos;
 	BitPos += CodeSize;
@@ -536,7 +536,7 @@ void CodeStream::WriteCode(UWORD code)
 // If <full> is false, only dump every complete accumulated byte.
 void CodeStream::DumpAccum(bool full)
 {
-	BYTE stop = full ? 0 : 7;
+	int8_t stop = full ? 0 : 7;
 	while (BitPos > stop)
 	{
 		Chunk[1 + Chunk[0]] = Accum & 0xFF;
@@ -549,7 +549,7 @@ void CodeStream::DumpAccum(bool full)
 	}
 }
 
-void CodeStream::AddByte(UBYTE p)
+void CodeStream::AddByte(uint8_t p)
 {
 	if (Match < 0)
 	{ // Start a new run. We know p is always in the dictionary.
@@ -557,7 +557,7 @@ void CodeStream::AddByte(UBYTE p)
 	}
 	else
 	{ // Is Match..p in the dictionary?
-		ULONG str = Match | (p << 16) | (1 << 24);
+		uint32_t str = Match | (p << 16) | (1 << 24);
 		DictType::const_iterator got = Dict.find(str);
 		if (got != Dict.end())
 		{ // Yes, so continue matching it.

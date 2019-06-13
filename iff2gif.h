@@ -26,12 +26,12 @@ struct PlanarBitmap
 	int NumPlanes;
 	int PaletteSize;
 	ColorRegister *Palette;
-	UBYTE *Planes[32];
-	UBYTE *PlaneData;
+	uint8_t *Planes[32];
+	uint8_t *PlaneData;
 	int TransparentColor;
 	int Delay;
 	int Rate;
-	UBYTE Interleave;
+	uint8_t Interleave;
 
 	PlanarBitmap(int w, int h, int nPlanes);
 	PlanarBitmap(const PlanarBitmap &o);
@@ -44,67 +44,67 @@ struct PlanarBitmap
 class IFFChunk
 {
 public:
-	IFFChunk(FILE *file, ULONG id, ULONG len);
+	IFFChunk(FILE *file, uint32_t id, uint32_t len);
 	~IFFChunk();
 
-	ULONG GetID() { return ChunkID; }
-	ULONG GetLen() { return ChunkLen; }
+	uint32_t GetID() { return ChunkID; }
+	uint32_t GetLen() { return ChunkLen; }
 	const void *GetData() { return ChunkData; }
 
 private:
-	ULONG ChunkID;
-	ULONG ChunkLen;
-	UBYTE *ChunkData;
+	uint32_t ChunkID;
+	uint32_t ChunkLen;
+	uint8_t *ChunkData;
 };
 
 class FORMReader
 {
 public:
 	FORMReader(_TCHAR *filename, FILE *file);
-	FORMReader(_TCHAR *filename, FILE *file, ULONG len);
+	FORMReader(_TCHAR *filename, FILE *file, uint32_t len);
 	~FORMReader();
 
-	ULONG GetID() { return FormID; }
-	ULONG GetLen() { return FormLen; }
-	ULONG GetPos() { return Pos; }
+	uint32_t GetID() { return FormID; }
+	uint32_t GetLen() { return FormLen; }
+	uint32_t GetPos() { return Pos; }
 	bool NextChunk(IFFChunk **chunk, FORMReader **form);
 
 private:
 	FILE *File;
 	_TCHAR *Filename;
-	ULONG FormLen;
-	ULONG FormID;
-	ULONG Pos;
+	uint32_t FormLen;
+	uint32_t FormID;
+	uint32_t Pos;
 };
 
 
 struct LogicalScreenDescriptor
 {
-	UWORD Width;
-	UWORD Height;
-	UBYTE Flags;
-	UBYTE BkgColor;
-	UBYTE AspectRatio;
+	uint16_t Width;
+	uint16_t Height;
+	uint8_t Flags;
+	uint8_t BkgColor;
+	uint8_t AspectRatio;
 };
 
 struct GraphicControlExtension
 {
-	UBYTE ExtensionIntroducer;
-	UBYTE GraphicControlLabel;
-	UBYTE BlockSize;
-	UBYTE Flags;
-	UWORD DelayTime;
-	UBYTE TransparentColor;
-	UBYTE BlockTerminator;
+	uint8_t ExtensionIntroducer;
+	uint8_t GraphicControlLabel;
+	uint8_t BlockSize;
+	uint8_t Flags;
+	uint16_t DelayTime;
+	uint8_t TransparentColor;
+	uint8_t BlockTerminator;
 };
 
 struct ImageDescriptor
 {
-	UWORD Left;
-	UWORD Top;
-	UWORD Width;
-	UWORD Height;
-	UBYTE Flags;
+	uint16_t Left;
+	uint16_t Top;
+	uint16_t Width;
+	uint16_t Height;
+	uint8_t Flags;
 };
 
 struct GIFFrame
@@ -119,7 +119,7 @@ struct GIFFrame
 
 	GraphicControlExtension GCE;
 	ImageDescriptor IMD;
-	std::vector<UBYTE> LZW;
+	std::vector<uint8_t> LZW;
 };
 
 class GIFFrameQueue
@@ -156,25 +156,25 @@ public:
 private:
 	FILE *File;
 	const _TCHAR *Filename;
-	UBYTE *PrevFrame;
+	uint8_t *PrevFrame;
 	GIFFrameQueue WriteQueue;
-	ULONG FrameCount;
-	ULONG TotalTicks;
-	ULONG GIFTime;
-	ULONG FrameRate;
+	uint32_t FrameCount;
+	uint32_t TotalTicks;
+	uint32_t GIFTime;
+	uint32_t FrameRate;
 	LogicalScreenDescriptor LSD;
-	UBYTE BkgColor;
-	UWORD PageWidth, PageHeight;
+	uint8_t BkgColor;
+	uint16_t PageWidth, PageHeight;
 	ColorRegister GlobalPal[256];
-	UBYTE GlobalPalBits;
+	uint8_t GlobalPalBits;
 
 	static int ExtendPalette(ColorRegister *dest, const ColorRegister *src, int numentries);
 	void WriteHeader(bool loop);
-	void MakeFrame(PlanarBitmap *bitmap, UBYTE *chunky);
-	void MinimumArea(const UBYTE *prev, const UBYTE *cur, ImageDescriptor &imd);
-	void DetectBackgroundColor(PlanarBitmap *bitmap, const UBYTE *chunky);
-	UBYTE SelectDisposal(PlanarBitmap *bitmap, ImageDescriptor &imd, const UBYTE *chunky);
-	int SelectTransparentColor(const UBYTE *prev, const UBYTE *now, const ImageDescriptor &imd, int pitch);
+	void MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky);
+	void MinimumArea(const uint8_t *prev, const uint8_t *cur, ImageDescriptor &imd);
+	void DetectBackgroundColor(PlanarBitmap *bitmap, const uint8_t *chunky);
+	uint8_t SelectDisposal(PlanarBitmap *bitmap, ImageDescriptor &imd, const uint8_t *chunky);
+	int SelectTransparentColor(const uint8_t *prev, const uint8_t *now, const ImageDescriptor &imd, int pitch);
 	void BadWrite();
 };
 

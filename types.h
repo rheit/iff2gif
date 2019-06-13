@@ -32,13 +32,6 @@
 
 typedef std::basic_string<_TCHAR> tstring;
 
-typedef unsigned char UBYTE;
-typedef signed char BYTE;
-typedef unsigned short UWORD;
-typedef signed short WORD;
-typedef unsigned int ULONG;
-typedef signed int LONG;
-
 #ifdef __APPLE__
 #include <libkern/OSByteOrder.h>
 
