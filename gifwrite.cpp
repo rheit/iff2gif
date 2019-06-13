@@ -146,7 +146,7 @@ void GIFWriter::WriteHeader(bool loop)
 	// Write (or skip) palette
 	if (lsd.Flags & 0x80)
 	{
-		if (fwrite(GlobalPal, 3, 1 << GlobalPalBits, File) != 1 << GlobalPalBits)
+		if (fwrite(GlobalPal, 3, (size_t)1 << GlobalPalBits, File) != (size_t)1 << GlobalPalBits)
 		{
 			BadWrite();
 			return;
