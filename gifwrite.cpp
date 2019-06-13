@@ -56,16 +56,11 @@ private:
 void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const uint8_t *prev, const uint8_t *chunky,
 	int pitch, uint8_t mincodesize, int trans);
 
-GIFWriter::GIFWriter(const _TCHAR *filename)
+GIFWriter::GIFWriter(tstring filename)
+	: Filename(filename)
 {
-	Filename = filename;
-	File = NULL;
-	FrameCount = 0;
-	TotalTicks = 0;
-	GIFTime = 0;
-	FrameRate = 50;		// Default to PAL!
-	PrevFrame = NULL;
-	BkgColor = 0;
+	memset(&LSD, 0, sizeof(LSD));
+	memset(GlobalPal, 0, sizeof(GlobalPal));
 }
 
 GIFWriter::~GIFWriter()
@@ -96,7 +91,7 @@ GIFWriter::~GIFWriter()
 
 void GIFWriter::BadWrite()
 {
-	_ftprintf(stderr, _T("Could not wite to %s: %s\n"), Filename, _tcserror(errno));
+	_ftprintf(stderr, _T("Could not wite to %s: %s\n"), Filename.c_str(), _tcserror(errno));
 	fclose(File);
 	File = NULL;
 	WriteQueue.SetFile(NULL);
@@ -136,10 +131,10 @@ void GIFWriter::WriteHeader(bool loop)
 	}
 
 	assert(File == NULL);
-	File = _tfopen(Filename, _T("wb"));
+	File = _tfopen(Filename.c_str(), _T("wb"));
 	if (File == NULL)
 	{
-		_ftprintf(stderr, _T("Could not open %s: %s\n"), Filename, _tcserror(errno));
+		_ftprintf(stderr, _T("Could not open %s: %s\n"), Filename.c_str(), _tcserror(errno));
 		return;
 	}
 	WriteQueue.SetFile(File);
@@ -539,6 +534,7 @@ void CodeStream::DumpAccum(bool full)
 	int8_t stop = full ? 0 : 7;
 	while (BitPos > stop)
 	{
+		assert(Chunk[0] < 255);
 		Chunk[1 + Chunk[0]] = Accum & 0xFF;
 		Accum >>= 8;
 		BitPos -= 8;
@@ -620,7 +616,7 @@ GIFFrame &GIFFrame::operator= (const GIFFrame &o)
 	return *this;
 }
 
-GIFFrame &GIFFrame::operator= (GIFFrame &&o)
+GIFFrame &GIFFrame::operator= (GIFFrame &&o) noexcept
 {
 	GCE = o.GCE;
 	IMD = o.IMD;

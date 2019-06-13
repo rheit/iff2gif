@@ -22,15 +22,15 @@
 
 struct PlanarBitmap
 {
-	int Width, Height, Pitch;
-	int NumPlanes;
-	int PaletteSize;
-	ColorRegister *Palette;
-	uint8_t *Planes[32];
-	uint8_t *PlaneData;
-	int TransparentColor;
-	int Delay;
-	int Rate;
+	int Width = 0, Height = 0, Pitch = 0;
+	int NumPlanes = 0;
+	int PaletteSize = 0;
+	ColorRegister *Palette = nullptr;
+	uint8_t *Planes[32]{nullptr};	// Points into PlaneData
+	uint8_t *PlaneData = nullptr;
+	int TransparentColor = -1;
+	int Delay = 0;
+	int Rate = 60;
 	uint8_t Interleave;
 
 	PlanarBitmap(int w, int h, int nPlanes);
@@ -111,7 +111,7 @@ struct GIFFrame
 {
 	GIFFrame();
 	GIFFrame &operator= (const GIFFrame &o);
-	GIFFrame &operator= (GIFFrame &&o);
+	GIFFrame &operator= (GIFFrame &&o) noexcept;
 
 	void SetDelay(int centisecs) { GCE.DelayTime = centisecs; }
 	void SetDisposal(int method) { GCE.Flags = (GCE.Flags & 0x1C0) | (method << 2); }
@@ -148,25 +148,25 @@ private:
 class GIFWriter
 {
 public:
-	GIFWriter(const _TCHAR *filename);
+	GIFWriter(tstring filename);
 	~GIFWriter();
 
 	void AddFrame(PlanarBitmap *bitmap);
 
 private:
-	FILE *File;
-	const _TCHAR *Filename;
-	uint8_t *PrevFrame;
+	FILE *File = nullptr;
+	tstring Filename;
+	uint8_t *PrevFrame = nullptr;
 	GIFFrameQueue WriteQueue;
-	uint32_t FrameCount;
-	uint32_t TotalTicks;
-	uint32_t GIFTime;
-	uint32_t FrameRate;
+	uint32_t FrameCount = 0;
+	uint32_t TotalTicks = 0;
+	uint32_t GIFTime = 0;
+	uint32_t FrameRate = 50;	// Default to PAL!
 	LogicalScreenDescriptor LSD;
-	uint8_t BkgColor;
-	uint16_t PageWidth, PageHeight;
+	uint8_t BkgColor = 0;
+	uint16_t PageWidth = 0, PageHeight = 0;
 	ColorRegister GlobalPal[256];
-	uint8_t GlobalPalBits;
+	uint8_t GlobalPalBits = 0;
 
 	static int ExtendPalette(ColorRegister *dest, const ColorRegister *src, int numentries);
 	void WriteHeader(bool loop);

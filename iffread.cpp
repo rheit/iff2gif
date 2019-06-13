@@ -594,9 +594,10 @@ PlanarBitmap *ApplyDelta(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, c
 
 PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 {
-	PlanarBitmap *planes = NULL;
+	PlanarBitmap *planes = nullptr;
 	BitmapHeader header;
 	AnimHeader anheader;
+	bool anhdread = false;
 	IFFChunk *chunk;
 	int speed = -1;
 	uint32_t modeid = 0;
@@ -639,6 +640,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 		case ID_ANHD:
 		{
 			const uint8_t *ahdr = (const uint8_t *)chunk->GetData();
+			anhdread = true;
 			anheader.operation = ahdr[0];
 			anheader.mask = ahdr[1];
 			anheader.w = BigShort(*(uint16_t *)(ahdr + 2));
@@ -659,6 +661,11 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 
 		case ID_CMAP:
 		{
+			if (!planes)
+			{
+				fprintf(stderr, "Colormap encountered before bitmap header\n");
+				return NULL;
+			}
 			int palsize = (chunk->GetLen() + 2) / 3;	// support truncated palettes
 			planes->Palette = new ColorRegister[palsize];
 			planes->PaletteSize = palsize;
@@ -742,6 +749,11 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			break;
 
 		case ID_DLTA:
+			if (!anhdread)
+			{
+				fprintf(stderr, "Delta chunk encountered before header\n");
+				return NULL;
+			}
 			if (history == NULL || history[anheader.interleave & 1] == NULL)
 			{
 				fprintf(stderr, "Delta chunk encountered without any history\n");

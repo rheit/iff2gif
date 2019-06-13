@@ -32,12 +32,6 @@ PlanarBitmap::PlanarBitmap(int w, int h, int nPlanes)
 	// Amiga bitplanes must be an even number of bytes wide
 	Pitch = ((w + 15) / 16) * 2;
 	NumPlanes = nPlanes;
-	Palette = NULL;
-	PaletteSize = 0;
-	TransparentColor = -1;
-	Interleave = 0;
-	Delay = 0;
-	Rate = 60;
 
 	// We always allocate at least 8 planes for faster planar to chunky conversion.
 	int realplanes = std::max(nPlanes, 8);

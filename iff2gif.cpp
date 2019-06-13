@@ -23,7 +23,6 @@
 int _tmain(int argc, _TCHAR* argv[])
 {
 	FILE *infile;
-	const _TCHAR *outname;
 	tstring outstring;
 
 	if (argc < 2 || argc > 3)
@@ -40,7 +39,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 	if (argc == 3)
 	{
-		outname = argv[2];
+		outstring = argv[2];
 	}
 	else
 	{
@@ -59,9 +58,8 @@ int _tmain(int argc, _TCHAR* argv[])
 		}
 		// Append the .gif extension to the input name.
 		outstring += _T(".gif");
-		outname = outstring.c_str();
 	}
-	GIFWriter writer(outname);
+	GIFWriter writer(outstring);
 	LoadFile(argv[1], infile, writer);
 	fclose(infile);
 	return 0;
