@@ -36,7 +36,7 @@ IFFChunk::IFFChunk(FILE *file, uint32_t id, uint32_t len)
 	size_t bytesread = fread(ChunkData, 1, len, file);
 	if (bytesread != len)
 	{
-		fprintf(stderr, "Only read %ud of %ud bytes in chunk %4s\n", bytesread, len, &ChunkID);
+		fprintf(stderr, "Only read %zu of %u bytes in chunk %4s\n", bytesread, len, (char *)&ChunkID);
 		ChunkID = 0;
 	}
 	if (len & 1)
@@ -700,7 +700,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			break;
 
 		case ID_ANNO:
-			printf("Annotation: %.*s\n", chunk->GetLen(), chunk->GetData());
+			printf("Annotation: %.*s\n", chunk->GetLen(), (char *)chunk->GetData());
 			break;
 
 		case ID_DPAN:
@@ -824,7 +824,7 @@ void LoadFile(_TCHAR *filename, FILE *file, GIFWriter &writer)
 		}
 		else
 		{
-			fprintf(stderr, "Unsupported IFF type %4s", &id);
+			fprintf(stderr, "Unsupported IFF type %4s", (char *)&id);
 			return;
 		}
 	}
