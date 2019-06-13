@@ -17,6 +17,7 @@
 */
 
 #include <vector>
+#include <queue>
 #include "types.h"
 #include "iff.h"
 
@@ -110,6 +111,7 @@ struct ImageDescriptor
 struct GIFFrame
 {
 	GIFFrame();
+	GIFFrame(const GIFFrame&& o) noexcept;
 	GIFFrame &operator= (const GIFFrame &o);
 	GIFFrame &operator= (GIFFrame &&o) noexcept;
 
@@ -122,6 +124,10 @@ struct GIFFrame
 	std::vector<uint8_t> LZW;
 };
 
+// GIF frames are not written directly after processing, because ANIMs
+// may or may not duplicate the initial frames at the end of the animation,
+// depending on whether they are used as ANIM brushes or normal fullscreen
+// ANIMs.
 class GIFFrameQueue
 {
 public:
@@ -131,18 +137,19 @@ public:
 	bool Enqueue(GIFFrame &&frame);
 	bool Flush();
 	void SetDropFrames(int count) { FinalFramesToDrop = count; }
-	GIFFrame *MostRecent() { return QueueCount > 0 ? &Queue[QueueCount - 1] : NULL; }
+	GIFFrame* MostRecent() { return Queue.empty() ? nullptr : &Queue.back(); }
 	void SetFile(FILE *f) { File = f; }
 
 private:
 	bool Shift();
 
-	enum { QUEUE_SIZE = 2 };
+	// As long as this is at least as large as the maximum interleave, it
+	// doesn't really matter what this is.
+	enum { MAX_QUEUE_SIZE = 8 };
 
 	FILE *File;
-	int QueueCount;
-	int FinalFramesToDrop;			// ANIMs duplicate frames at the end to facilitate looping
-	GIFFrame Queue[QUEUE_SIZE];		// oldest frames come first
+	size_t FinalFramesToDrop;		// ANIMs duplicate frames at the end to facilitate looping
+	std::queue<GIFFrame> Queue;		// oldest frames come first
 };
 
 class GIFWriter

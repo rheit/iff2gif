@@ -608,6 +608,11 @@ GIFFrame::GIFFrame()
 	IMD.Flags = 0;
 }
 
+GIFFrame::GIFFrame(const GIFFrame&& o) noexcept
+{
+	*this = std::move(o);
+}
+
 GIFFrame &GIFFrame::operator= (const GIFFrame &o)
 {
 	GCE = o.GCE;
@@ -653,7 +658,6 @@ bool GIFFrame::Write(FILE *file)
 GIFFrameQueue::GIFFrameQueue()
 {
 	File = NULL;
-	QueueCount = 0;
 	FinalFramesToDrop = 0;
 }
 
@@ -665,26 +669,26 @@ GIFFrameQueue::~GIFFrameQueue()
 bool GIFFrameQueue::Flush()
 {
 	bool wrote = true;
-	for (int i = 0; i < QueueCount - FinalFramesToDrop; ++i)
+	while (Queue.size() > FinalFramesToDrop)
 	{
-		if (!Queue[i].Write(File))
+		if (!Shift())
 		{
 			wrote = false;
 			break;
 		}
 	}
-	QueueCount = 0;
+	Queue = {};
 	return wrote;
 }
 
 bool GIFFrameQueue::Enqueue(GIFFrame &&frame)
 {
 	bool wrote = true;
-	if (QueueCount == QUEUE_SIZE)
+	if (Queue.size() >= MAX_QUEUE_SIZE)
 	{
 		wrote = Shift();
 	}
-	Queue[QueueCount++] = frame;
+	Queue.emplace(std::move(frame));
 	return wrote;
 }
 
@@ -692,17 +696,10 @@ bool GIFFrameQueue::Enqueue(GIFFrame &&frame)
 bool GIFFrameQueue::Shift()
 {
 	bool wrote = true;
-	if (QueueCount > 0)
+	if (!Queue.empty())
 	{
-		if (!Queue[0].Write(File))
-		{
-			wrote = false;
-		}
-		QueueCount--;
-		for (int i = 0; i < QueueCount; ++i)
-		{
-			Queue[i] = std::move(Queue[i + 1]);
-		}
+		wrote = Queue.front().Write(File);
+		Queue.pop();
 	}
 	return wrote;
 }
