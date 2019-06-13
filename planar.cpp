@@ -1,6 +1,6 @@
 /* This file is part of iff2gif.
 **
-** Copyright 2015 - Randy Heit
+** Copyright 2015-2019 - Marisa Heit
 **
 ** iff2gif is free software : you can redistribute it and / or modify
 ** it under the terms of the GNU General Public License as published by
