@@ -17,6 +17,7 @@
 */
 
 #include <stdlib.h>
+#include <string>
 #ifdef _WIN32
 #include <tchar.h>
 #else
@@ -28,6 +29,8 @@
 #define _tcserror strerror
 #define _tcsrchr strrchr
 #endif
+
+typedef std::basic_string<_TCHAR> tstring;
 
 typedef unsigned char UBYTE;
 typedef signed char BYTE;

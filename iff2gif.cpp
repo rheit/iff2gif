@@ -24,7 +24,7 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 	FILE *infile;
 	const _TCHAR *outname;
-	std::basic_string<_TCHAR> outstring;
+	tstring outstring;
 
 	if (argc < 2 || argc > 3)
 	{
@@ -44,27 +44,20 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 	else
 	{
-		// Replace the extension if it's 4 or fewer characters
-		const _TCHAR *stop = _tcsrchr(argv[1], _T('.'));
-		size_t extlen;
-		if (stop != NULL)
+		outstring = argv[1];
+
+		// Strip off the existing extension if it's 4 or fewer characters.
+		auto stop = outstring.find_last_of(_T('.'));
+		if (stop != tstring::npos)
 		{
-			extlen = argv[1] + _tcslen(argv[1]) - stop + 1;
+			size_t extlen = outstring.size() - stop - 1;
 			// "Real" extensions don't start with a space character
-			if (extlen > 0 && stop[1] == _T(' '))
+			if (extlen > 0 && extlen <= 4 && outstring[stop + 1] != _T(' '))
 			{
-				extlen = 0;
+				outstring.resize(stop);
 			}
 		}
-		if (extlen > 0 && extlen <= 4)
-		{
-			outstring = std::basic_string<_TCHAR>(argv[1], stop);
-		}
-		// Otherwise, just tack it on
-		else
-		{
-			outstring = argv[1];
-		}
+		// Append the .gif extension to the input name.
 		outstring += _T(".gif");
 		outname = outstring.c_str();
 	}
