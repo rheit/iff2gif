@@ -45,7 +45,7 @@ struct PlanarBitmap
 class IFFChunk
 {
 public:
-	IFFChunk(FILE *file, uint32_t id, uint32_t len);
+	IFFChunk(std::istream &file, uint32_t id, uint32_t len);
 	~IFFChunk();
 
 	uint32_t GetID() { return ChunkID; }
@@ -61,8 +61,8 @@ private:
 class FORMReader
 {
 public:
-	FORMReader(_TCHAR *filename, FILE *file);
-	FORMReader(_TCHAR *filename, FILE *file, uint32_t len);
+	FORMReader(_TCHAR *filename, std::istream &file);
+	FORMReader(_TCHAR *filename, std::istream &file, uint32_t len);
 	~FORMReader();
 
 	uint32_t GetID() { return FormID; }
@@ -71,7 +71,7 @@ public:
 	bool NextChunk(IFFChunk **chunk, FORMReader **form);
 
 private:
-	FILE *File;
+	std::istream &File;
 	_TCHAR *Filename;
 	uint32_t FormLen;
 	uint32_t FormID;
@@ -185,5 +185,5 @@ private:
 	void BadWrite();
 };
 
-void LoadFile(_TCHAR *filename, FILE *file, GIFWriter &writer);
+void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer);
 void rotate8x8(unsigned char *src, int srcstep, unsigned char *dst, int dststep);
