@@ -18,11 +18,12 @@
 
 #include <stdio.h>
 #include <string>
+#include <fstream>
 #include "iff2gif.h"
 
 int _tmain(int argc, _TCHAR* argv[])
 {
-	FILE *infile;
+	std::ifstream infile;
 	tstring outstring;
 
 	if (argc < 2 || argc > 3)
@@ -31,8 +32,8 @@ int _tmain(int argc, _TCHAR* argv[])
 		return 1;
 	}
 
-	infile = _tfopen(argv[1], _T("rb"));
-	if (infile == NULL)
+	infile.open(argv[1], std::ios_base::in | std::ios_base::binary);
+	if (!infile.is_open())
 	{
 		_ftprintf(stderr, _T("Could not open %s: %s\n"), argv[1], _tcserror(errno));
 		return 1;
@@ -61,6 +62,5 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 	GIFWriter writer(outstring);
 	LoadFile(argv[1], infile, writer);
-	fclose(infile);
 	return 0;
 }

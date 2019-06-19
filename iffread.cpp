@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <stdio.h>
+#include <iostream>
 #include <string.h>
 #include <malloc.h>
 #include <math.h>
@@ -27,21 +28,20 @@
 
 static const uint16_t *Do8short(uint16_t *pixel, uint16_t *stop, const uint16_t *ops, uint16_t xormask, int pitch);
 
-IFFChunk::IFFChunk(FILE *file, uint32_t id, uint32_t len)
+IFFChunk::IFFChunk(std::istream &file, uint32_t id, uint32_t len)
 {
 	ChunkID = id;
 	ChunkLen = len;
 	ChunkData = new uint8_t[len];
 
-	size_t bytesread = fread(ChunkData, 1, len, file);
-	if (bytesread != len)
+	if (!file.read(reinterpret_cast<char *>(ChunkData), len))
 	{
-		fprintf(stderr, "Only read %zu of %u bytes in chunk %4s\n", bytesread, len, (char *)&ChunkID);
+		fprintf(stderr, "Only read %zu of %u bytes in chunk %4s\n", file.gcount(), len, (char *)&ChunkID);
 		ChunkID = 0;
 	}
 	if (len & 1)
 	{ // Skip padding byte after odd-sized chunks.
-		fseek(file, 1, SEEK_CUR);
+		file.seekg(1, std::ios_base::cur);
 	}
 }
 
@@ -53,26 +53,26 @@ IFFChunk::~IFFChunk()
 	}
 }
 
-FORMReader::FORMReader(_TCHAR *filename, FILE *file)
+FORMReader::FORMReader(_TCHAR *filename, std::istream &file)
+	: File(file)
 {
-	File = file;
 	Filename = filename;
 
 	// If we rewind 4 bytes and read, we should get 'FORM'.
-	fread(&FormLen, 4, 1, file);
-	fread(&FormID, 4, 1, file);
+	file.read(reinterpret_cast<char*>(&FormLen), 4);
+	file.read(reinterpret_cast<char*>(&FormID), 4);
 
 	FormLen = BigLong(FormLen);
 	Pos = 4;	// Length includes the FORM ID
 }
 
-FORMReader::FORMReader(_TCHAR *filename, FILE *file, uint32_t len)
+FORMReader::FORMReader(_TCHAR *filename, std::istream &file, uint32_t len)
+	: File(file)
 {
-	File = file;
 	Filename = filename;
 	FormLen = len;
 
-	fread(&FormID, 4, 1, file);
+	file.read(reinterpret_cast<char*>(&FormID), 4);
 	Pos = 4;
 }
 
@@ -83,7 +83,7 @@ FORMReader::~FORMReader()
 	uint32_t len = FormLen + (FormLen & 1);
 	if (Pos != len)
 	{
-		fseek(File, len - Pos, SEEK_CUR);
+		File.seekg(len - Pos, std::ios_base::cur);
 	}
 }
 
@@ -110,7 +110,7 @@ bool FORMReader::NextChunk(IFFChunk **chunk, FORMReader **form)
 	if (Pos < FormLen)
 	{
 		uint32_t chunkhead[2];	// ID, Len
-		if (fread(chunkhead, 4, 2, File) == 2)
+		if (File.read(reinterpret_cast<char *>(chunkhead), 4 * 2).good())
 		{
 			uint32_t id = chunkhead[0];
 			uint32_t len = BigLong(chunkhead[1]);
@@ -120,7 +120,7 @@ bool FORMReader::NextChunk(IFFChunk **chunk, FORMReader **form)
 			{
 				if (form == NULL)
 				{
-					fseek(File, len + (len & 1), SEEK_CUR);
+					File.seekg(len + (len & 1), std::ios_base::cur);
 					return NextChunk(chunk, NULL);
 				}
 				*form = new FORMReader(Filename, File, len);
@@ -129,7 +129,7 @@ bool FORMReader::NextChunk(IFFChunk **chunk, FORMReader **form)
 			{
 				if (chunk == NULL)
 				{
-					fseek(File, len + (len & 1), SEEK_CUR);
+					File.seekg(len + (len & 1), std::ios_base::cur);
 					return NextChunk(NULL, form);
 				}
 				IFFChunk *chunker = new IFFChunk(File, id, len);
@@ -808,11 +808,11 @@ static void LoadANIM(FORMReader &form, GIFWriter &writer)
 	if (history[1] != NULL) delete history[1];
 }
 
-void LoadFile(_TCHAR *filename, FILE *file, GIFWriter &writer)
+void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer)
 {
 	uint32_t id = 0;
 
-	if (fread(&id, 4, 1, file) == 1)
+	if (file.read(reinterpret_cast<char *>(&id), 4).good())
 	{
 		if (id != ID_FORM)
 		{
