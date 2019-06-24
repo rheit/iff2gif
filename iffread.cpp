@@ -18,6 +18,7 @@
 
 
 #include <algorithm>
+#include <filesystem>
 #include <iostream>
 #include <string.h>
 #include <malloc.h>
@@ -113,7 +114,6 @@ bool FORMReader::NextChunk(IFFChunk **chunk, FORMReader **form)
 		{
 			uint32_t id = chunkhead[0];
 			uint32_t len = BigLong(chunkhead[1]);
-
 			Pos += len + (len & 1) + 8;
 			if (id == ID_FORM)
 			{
@@ -807,12 +807,53 @@ static void LoadANIM(FORMReader &form, GIFWriter &writer)
 	if (history[1] != NULL) delete history[1];
 }
 
+// This class from https://gist.github.com/mlfarrell/28ea0e7b10756042956b579781ac0dd8
+struct membuf : std::streambuf
+{
+	membuf(char *begin, char *end) : begin(begin), end(end)
+	{
+		this->setg(begin, begin, end);
+	}
+
+	virtual pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which = std::ios_base::in) override
+	{
+		if (dir == std::ios_base::cur)
+			gbump((int)off);
+		else if (dir == std::ios_base::end)
+			setg(begin, end + off, end);
+		else if (dir == std::ios_base::beg)
+			setg(begin, begin + off, end);
+
+		return gptr() - eback();
+	}
+
+	virtual pos_type seekpos(std::streampos pos, std::ios_base::openmode mode) override
+	{
+		return seekoff(pos - pos_type(off_type(0)), std::ios_base::beg, mode);
+	}
+
+	char *begin, *end;
+};
+
+
 void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer)
 {
 	uint32_t id = 0;
 
 	if (file.read(reinterpret_cast<char *>(&id), 4).good())
 	{
+		if (id == ID_PP20)
+		{
+			std::filesystem::path p(filename);
+			unsigned unpackedsize;
+			std::unique_ptr<uint8_t[]> unpacked =
+				LoadPowerPackerFile(file, (size_t)std::filesystem::file_size(p), unpackedsize);
+
+			membuf sbuf((char *)unpacked.get(), (char *)unpacked.get() + unpackedsize);
+			std::istream unppfile(&sbuf);
+			LoadFile(filename, unppfile, writer);
+			return;
+		}
 		if (id != ID_FORM)
 		{
 			_ftprintf(stderr, _T("%s is not an IFF FORM\n"), filename);

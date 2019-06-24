@@ -18,6 +18,7 @@
 
 #include <vector>
 #include <queue>
+#include <iostream>
 #include "types.h"
 #include "iff.h"
 
@@ -185,5 +186,8 @@ private:
 	void BadWrite();
 };
 
+#define ID_PP20 MAKE_ID('P','P','2','0')
+
 void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer);
+std::unique_ptr<uint8_t[]> LoadPowerPackerFile(std::istream &file, size_t filesize, unsigned &unpackedsize);
 void rotate8x8(unsigned char *src, int srcstep, unsigned char *dst, int dststep);
