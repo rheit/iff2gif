@@ -56,11 +56,15 @@ private:
 void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const uint8_t *prev, const uint8_t *chunky,
 	int pitch, uint8_t mincodesize, int trans);
 
-GIFWriter::GIFWriter(tstring filename)
-	: Filename(filename)
+GIFWriter::GIFWriter(tstring filename, bool solo)
+	: BaseFilename(filename), SoloMode(solo)
 {
 	memset(&LSD, 0, sizeof(LSD));
 	memset(GlobalPal, 0, sizeof(GlobalPal));
+	if (solo)
+	{
+		CheckForIndexSpot();
+	}
 }
 
 GIFWriter::~GIFWriter()
@@ -71,22 +75,33 @@ GIFWriter::~GIFWriter()
 		// input. For a single frame image, we need to write it now.
 		WriteHeader(false);
 	}
-	if (File != NULL)
-	{
-		if (!WriteQueue.Flush() ||
-			fputc(0x3B, File) == EOF)	// Add the trailer byte to terminate the GIF
-		{
-			BadWrite();
-		}
-		else
-		{
-			fclose(File);
-		}
-	}
-	if (PrevFrame != NULL)
+	FinishFile();
+	if (PrevFrame != nullptr)
 	{
 		delete[] PrevFrame;
 	}
+}
+
+bool GIFWriter::FinishFile()
+{
+	// Pretend success if no file is open.
+	bool succ = true;
+	if (File != nullptr)
+	{
+		// The 0x3B is a trailer byte to terminate the GIF.
+		succ = WriteQueue.Flush() && fputc(0x3B, File) != EOF;
+		if (succ)
+		{
+			fclose(File);
+			WriteQueue.SetFile(nullptr);
+			File = nullptr;
+		}
+		else
+		{
+			BadWrite();
+		}
+	}
+	return succ;
 }
 
 void GIFWriter::BadWrite()
@@ -95,6 +110,59 @@ void GIFWriter::BadWrite()
 	fclose(File);
 	File = nullptr;
 	WriteQueue.SetFile(nullptr);
+}
+
+// When created in solo mode, check the output filename to see if it includes
+// a placeholder for the frame index.
+void GIFWriter::CheckForIndexSpot()
+{
+	// Find the extension (if there is one).
+	auto stop = BaseFilename.find_last_of(_T('.'));
+	// If . is the last character, it's not really an extension.
+	SExtIndex = (stop == tstring::npos || stop == BaseFilename.length() - 1) ? -1 : (int)stop;
+	int startidx = SExtIndex >= 0 ? SExtIndex : (int)BaseFilename.length();
+	int idx = startidx;
+	// Check for trailing 0s
+	while (--idx >= 0 && BaseFilename[idx] == _T('0'))
+	{
+		// pass
+	}
+	SFrameIndex = idx + 1;
+	SFrameLength = startidx - idx - 1;
+}
+
+// Generate a new filename to write to. In normal operation, this is just BaseFilename.
+// In solo mode, this is a newly-created filename.
+void GIFWriter::GenFilename()
+{
+	if (!SoloMode)
+	{
+		Filename = BaseFilename;
+		return;
+	}
+	Filename = BaseFilename.substr(0, SFrameIndex);
+	tstring index = to_tstring(FrameCount + 1);		// Use a 1-based index
+	if (index.length() < SFrameLength)
+	{
+		Filename += tstring(SFrameLength - index.length(), _T('0'));
+	}
+	Filename += index;
+	if (SExtIndex >= 0)
+	{
+		Filename += BaseFilename.substr((size_t)SExtIndex);
+	}
+}
+
+// Returns the number of decimal digits needed to display num.
+static int numdigits(int num)
+{
+	int ndig = 1;
+	while (num > 9)
+	{
+		num /= 10;
+		ndig++;
+	}
+	return ndig;
 }
 
 void GIFWriter::AddFrame(PlanarBitmap *bitmap)
@@ -108,9 +176,16 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 		PageHeight = bitmap->Height;
 		GlobalPalBits = ExtendPalette(GlobalPal, bitmap->Palette, bitmap->PaletteSize);
 		DetectBackgroundColor(bitmap, chunky);
+		if (SFrameLength == 0)
+		{ // Automatically decide what should be an adequate length for the frame number
+		  // part of the filename in solo mode if we haven't already got a length for it.
+			SFrameLength = numdigits(bitmap->NumFrames);
+		}
 	}
-	else if (FrameCount == 1)
-	{ // This is the second frame, so we know we can loop this GIF.
+	// In solo mode, always create a file. In normal mode, wait until
+	// we get to the second frame, so we know if it's loopable or not.
+	if (SoloMode || FrameCount == 1)
+	{
 		WriteHeader(true);
 	}
 	if (bitmap->Rate > 0)
@@ -130,7 +205,17 @@ void GIFWriter::WriteHeader(bool loop)
 		lsd.Flags = 0xF0 | (GlobalPalBits - 1);
 	}
 
-	assert(File == NULL);
+	if (SoloMode)
+	{
+		loop = false;	// never loop in solo mode (because there's only one frame)
+		if (File != nullptr && !FinishFile())
+		{
+			BadWrite();
+			return;
+		}
+	}
+	assert(File == nullptr);
+	GenFilename();
 	File = _tfopen(Filename.c_str(), _T("wb"));
 	if (File == NULL)
 	{
@@ -194,7 +279,7 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky)
 {
 	GIFFrame newframe, *oldframe;
 
-	WriteQueue.SetDropFrames(bitmap->Interleave);
+	WriteQueue.SetDropFrames(SoloMode ? 0 : bitmap->Interleave);
 	newframe.IMD.Width = LittleShort(bitmap->Width);
 	newframe.IMD.Height = LittleShort(bitmap->Height);
 
@@ -277,6 +362,11 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky)
 	if (PrevFrame != NULL)
 	{
 		delete[] PrevFrame;
+	}
+	if (SoloMode)
+	{
+		delete[] chunky;
+		chunky = nullptr;
 	}
 	PrevFrame = chunky;
 }

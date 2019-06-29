@@ -599,6 +599,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 	bool anhdread = false;
 	IFFChunk *chunk;
 	int speed = -1;
+	int numframes = 0;
 	uint32_t modeid = 0;
 	bool ocspal = false;
 
@@ -717,7 +718,11 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			{ // probably an ANIM brush, so pretend it's 10 fps
 				speed = 10;
 			}
-			printf("%u frames @ %u fps\n", BigShort(dpan->nframes), dpan->speed);
+			// The DPAN chunk is optional, so its nframes field can ever
+			// only be considered a hint. You should still read as many
+			// frames as you can.
+			numframes = BigShort(dpan->nframes);
+			printf("%u frames @ %u fps\n", numframes, dpan->speed);
 			break;
 		}
 
@@ -769,6 +774,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 		{
 			planes->Rate = speed;
 		}
+		planes->NumFrames = numframes;
 		return planes;
 	}
 	return NULL;

@@ -34,6 +34,7 @@ struct PlanarBitmap
 	int Delay = 0;
 	int Rate = 60;
 	uint8_t Interleave;
+	int NumFrames = 0;				// A hint, not authoritative
 
 	PlanarBitmap(int w, int h, int nPlanes);
 	PlanarBitmap(const PlanarBitmap &o);
@@ -156,14 +157,14 @@ private:
 class GIFWriter
 {
 public:
-	GIFWriter(tstring filename);
+	GIFWriter(tstring filename, bool solo);
 	~GIFWriter();
 
 	void AddFrame(PlanarBitmap *bitmap);
 
 private:
 	FILE *File = nullptr;
-	tstring Filename;
+	tstring BaseFilename;
 	uint8_t *PrevFrame = nullptr;
 	GIFFrameQueue WriteQueue;
 	uint32_t FrameCount = 0;
@@ -176,6 +177,12 @@ private:
 	ColorRegister GlobalPal[256];
 	uint8_t GlobalPalBits = 0;
 
+	bool SoloMode = false;
+	int SFrameIndex = 0;	// In solo mode: Character index where frame number starts
+	int SFrameLength = 0;	// In solo mode: Number of characters for frame number
+	int SExtIndex = -1;		// In solo mode: Character index where extension starts
+	tstring Filename;
+
 	static int ExtendPalette(ColorRegister *dest, const ColorRegister *src, int numentries);
 	void WriteHeader(bool loop);
 	void MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky);
@@ -183,7 +190,10 @@ private:
 	void DetectBackgroundColor(PlanarBitmap *bitmap, const uint8_t *chunky);
 	uint8_t SelectDisposal(PlanarBitmap *bitmap, ImageDescriptor &imd, const uint8_t *chunky);
 	int SelectTransparentColor(const uint8_t *prev, const uint8_t *now, const ImageDescriptor &imd, int pitch);
+	bool FinishFile();	// Finish writing the file. Returns true on success.
 	void BadWrite();
+	void CheckForIndexSpot();
+	void GenFilename();
 };
 
 #define ID_PP20 MAKE_ID('P','P','2','0')

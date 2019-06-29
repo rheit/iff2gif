@@ -21,30 +21,56 @@
 #include <fstream>
 #include "iff2gif.h"
 
+static int usage(_TCHAR *progname)
+{
+	_ftprintf(stderr, _T(
+"Usage: [-f] %s <source IFF> [dest GIF]\n"
+"    -f  Save each frame to a separate file. If consecutive '0's are present\n"
+"        at the end of [dest GIF], they will be replaced with the frame\n"
+"        number. Otherwise, the frame number will be inserted before the\n"
+"        .gif extension.\n"),
+		progname);
+	return 1;
+}
+
 int _tmain(int argc, _TCHAR* argv[])
 {
+	_TCHAR *inparm;
 	std::ifstream infile;
 	tstring outstring;
+	int opt;
+	bool solomode = false;
 
-	if (argc < 2 || argc > 3)
+	while ((opt = getopt(argc, argv, "f")) != -1)
 	{
-		_ftprintf(stderr, _T("Usage: iff2gif <source IFF> [dest GIF]\n"));
-		return 1;
+		switch (opt)
+		{
+		case 'f':
+			solomode = true;
+			break;
+		default:
+			return usage(argv[0]);
+		}
 	}
 
-	infile.open(argv[1], std::ios_base::in | std::ios_base::binary);
+	if (optind >= argc)
+	{
+		return usage(argv[0]);
+	}
+	inparm = argv[optind];
+	infile.open(inparm, std::ios_base::in | std::ios_base::binary);
 	if (!infile.is_open())
 	{
-		_ftprintf(stderr, _T("Could not open %s: %s\n"), argv[1], _tcserror(errno));
+		_ftprintf(stderr, _T("Could not open %s: %s\n"), inparm, _tcserror(errno));
 		return 1;
 	}
-	if (argc == 3)
+	if (optind + 1 < argc)
 	{
-		outstring = argv[2];
+		outstring = argv[optind + 1];
 	}
 	else
 	{
-		outstring = argv[1];
+		outstring = inparm;
 
 		// Strip off the existing extension if it's 4 or fewer characters.
 		auto stop = outstring.find_last_of(_T('.'));
@@ -60,7 +86,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		// Append the .gif extension to the input name.
 		outstring += _T(".gif");
 	}
-	GIFWriter writer(outstring);
+	GIFWriter writer(outstring, solomode);
 	LoadFile(argv[1], infile, writer);
 	return 0;
 }

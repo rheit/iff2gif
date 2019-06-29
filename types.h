@@ -17,10 +17,29 @@
 */
 
 #include <stdlib.h>
-#include <string>
+
 #ifdef _WIN32
 #include <tchar.h>
+
+#ifdef _UNICODE
+#define to_tstring std::to_wstring
 #else
+#define to_tstring std::to_string
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+	extern int opterr, optind, optopt;
+	extern _TCHAR *optarg;
+	extern int getopt(int argc, _TCHAR **argv, const char *optstring);
+#ifdef __cplusplus
+}
+#endif
+
+#else
+// These macros are a pain in the butt to use, but they seemed like the least
+// amount of work to support Windows and other OSes with the same source.
 #define _TCHAR char
 #define _T(x) x
 #define _ftprintf fprintf
@@ -28,8 +47,12 @@
 #define _tcslen strlen
 #define _tcserror strerror
 #define _tcsrchr strrchr
+#define _tcscmp strcmp
+#define to_tstring std::to_string
 #endif
 
+#ifdef __cplusplus
+#include <string>
 typedef std::basic_string<_TCHAR> tstring;
 
 #ifdef __APPLE__
@@ -178,6 +201,7 @@ inline int BigLong(int x)
 
 #endif // __BIG_ENDIAN__
 #endif // __APPLE__
+#endif // __cplusplus
 
 #ifndef __BIG_ENDIAN__
 #define MAKE_ID(a,b,c,d)	((a)|((b)<<8)|((c)<<16)|((d)<<24))
