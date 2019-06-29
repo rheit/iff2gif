@@ -44,9 +44,9 @@ table(ltab7, 7)
 
 void rotate8x8(unsigned char *src, int srcstep, unsigned char *dst, int dststep)
 {
-	register unsigned char *p;
-	register int    pstep, lonyb, hinyb;
-	register bit32  lo, hi;
+	unsigned char *p;
+	int    pstep, lonyb, hinyb;
+	bit32  lo, hi;
 
 	lo = hi = 0;
 
