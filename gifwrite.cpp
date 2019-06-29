@@ -91,10 +91,10 @@ GIFWriter::~GIFWriter()
 
 void GIFWriter::BadWrite()
 {
-	_ftprintf(stderr, _T("Could not wite to %s: %s\n"), Filename.c_str(), _tcserror(errno));
+	_ftprintf(stderr, _T("Could not write to %s: %s\n"), Filename.c_str(), _tcserror(errno));
 	fclose(File);
-	File = NULL;
-	WriteQueue.SetFile(NULL);
+	File = nullptr;
+	WriteQueue.SetFile(nullptr);
 }
 
 void GIFWriter::AddFrame(PlanarBitmap *bitmap)
