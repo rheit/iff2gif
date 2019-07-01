@@ -47,8 +47,12 @@ extern "C" {
 #define _tcslen strlen
 #define _tcserror strerror
 #define _tcsrchr strrchr
+#define _tcschr strchr
 #define _tcscmp strcmp
 #define _ttoi atoi
+#define _tcstok strtok
+#define _tcspbrk strbrk
+#define _tcstoul strtoul
 #define to_tstring std::to_string
 #endif
 

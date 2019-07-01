@@ -56,8 +56,9 @@ private:
 void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const uint8_t *prev, const uint8_t *chunky,
 	int pitch, uint8_t mincodesize, int trans);
 
-GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate)
-	: BaseFilename(filename), SoloMode(solo), ForcedFrameRate(forcedrate > 0)
+GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate,
+	std::vector<std::pair<unsigned, unsigned>> &clips)
+	: BaseFilename(filename), SoloMode(solo), ForcedFrameRate(forcedrate > 0), Clips(clips)
 {
 	if (forcedrate > 0)
 	{
@@ -69,11 +70,15 @@ GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate)
 	{
 		CheckForIndexSpot();
 	}
+	if (Clips.size() == 0)
+	{
+		Clips.push_back({ 1, UINT_MAX });
+	}
 }
 
 GIFWriter::~GIFWriter()
 {
-	if (FrameCount == 1)
+	if (WriteQueue.Total() == 1)
 	{
 		// The header is not normally written until we reach the second frame of the
 		// input. For a single frame image, we need to write it now.
@@ -186,18 +191,36 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 			SFrameLength = numdigits(bitmap->NumFrames);
 		}
 	}
-	// In solo mode, always create a file. In normal mode, wait until
-	// we get to the second frame, so we know if it's loopable or not.
-	if (SoloMode || FrameCount == 1)
-	{
-		WriteHeader(true);
-	}
 	if (bitmap->Rate > 0 && !ForcedFrameRate)
 	{
 		FrameRate = bitmap->Rate;
 	}
-	MakeFrame(bitmap, chunky);
 	FrameCount++;
+	// Only make the frame if it's in a desired clip range.
+	if (!Clips.empty())
+	{
+		if (FrameCount >= Clips[0].first)
+		{
+			// In solo mode, always create a file. In normal mode, wait until
+			// we get to the second frame, so we know if it's loopable or not.
+			if (SoloMode || WriteQueue.Total() == 1)
+			{
+				WriteHeader(true);
+			}
+			MakeFrame(bitmap, chunky);
+		}
+		if (FrameCount == Clips[0].second)
+		{
+			Clips.erase(begin(Clips));
+			// If we exhausted every clip, make sure to write the final frames.
+			// Normally, the final two would be dropped if we did the whole file,
+			// since they duplicate the first two.
+			if (Clips.empty())
+			{
+				WriteQueue.SetDropFrames(0);
+			}
+		}
+	}
 }
 
 void GIFWriter::WriteHeader(bool loop)
@@ -319,7 +342,7 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky)
 	// Replaces unchanged pixels with a transparent color, if there's room in the palette.
 	int trans;
 	bool temptrans = false;
-	if (FrameCount == 0 || PrevFrame == NULL || (newframe.GCE.Flags & 0x1C0) == 0x80)
+	if (WriteQueue.Total() == 0 || PrevFrame == NULL || (newframe.GCE.Flags & 0x1C0) == 0x80)
 	{
 		trans = -1;
 	}
@@ -783,6 +806,7 @@ bool GIFFrameQueue::Enqueue(GIFFrame &&frame)
 		wrote = Shift();
 	}
 	Queue.emplace(std::move(frame));
+	TotalQueued++;
 	return wrote;
 }
 

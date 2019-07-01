@@ -140,6 +140,7 @@ public:
 	bool Flush();
 	void SetDropFrames(int count) { FinalFramesToDrop = count; }
 	GIFFrame* MostRecent() { return Queue.empty() ? nullptr : &Queue.back(); }
+	unsigned int Total() { return TotalQueued; }
 	void SetFile(FILE *f) { File = f; }
 
 private:
@@ -152,12 +153,14 @@ private:
 	FILE *File;
 	size_t FinalFramesToDrop;		// ANIMs duplicate frames at the end to facilitate looping
 	std::queue<GIFFrame> Queue;		// oldest frames come first
+	unsigned TotalQueued = 0;		// Total # of frames that have ever been queued (not just queued now)
 };
 
 class GIFWriter
 {
 public:
-	GIFWriter(tstring filename, bool solo, int forcedrate);
+	GIFWriter(tstring filename, bool solo, int forcedrate,
+		std::vector<std::pair<unsigned, unsigned>> &clips);
 	~GIFWriter();
 
 	void AddFrame(PlanarBitmap *bitmap);
@@ -177,6 +180,7 @@ private:
 	ColorRegister GlobalPal[256];
 	uint8_t GlobalPalBits = 0;
 	bool ForcedFrameRate;
+	std::vector<std::pair<unsigned, unsigned>> Clips;
 
 	bool SoloMode = false;
 	int SFrameIndex = 0;	// In solo mode: Character index where frame number starts
