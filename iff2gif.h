@@ -157,7 +157,7 @@ private:
 class GIFWriter
 {
 public:
-	GIFWriter(tstring filename, bool solo);
+	GIFWriter(tstring filename, bool solo, int forcedrate);
 	~GIFWriter();
 
 	void AddFrame(PlanarBitmap *bitmap);
@@ -176,6 +176,7 @@ private:
 	uint16_t PageWidth = 0, PageHeight = 0;
 	ColorRegister GlobalPal[256];
 	uint8_t GlobalPalBits = 0;
+	bool ForcedFrameRate;
 
 	bool SoloMode = false;
 	int SFrameIndex = 0;	// In solo mode: Character index where frame number starts

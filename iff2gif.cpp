@@ -24,11 +24,12 @@
 static int usage(_TCHAR *progname)
 {
 	_ftprintf(stderr, _T(
-"Usage: [-f] %s <source IFF> [dest GIF]\n"
+"Usage: %s [-f] [-r <frame rate>] <source IFF> [dest GIF]\n"
 "    -f  Save each frame to a separate file. If consecutive '0's are present\n"
 "        at the end of [dest GIF], they will be replaced with the frame\n"
 "        number. Otherwise, the frame number will be inserted before the\n"
-"        .gif extension.\n"),
+"        .gif extension.\n
+"    -r  Specify a frame rate to use instead of the one in the ANIM."),
 		progname);
 	return 1;
 }
@@ -40,13 +41,17 @@ int _tmain(int argc, _TCHAR* argv[])
 	tstring outstring;
 	int opt;
 	bool solomode = false;
+	int forcedrate = 0;
 
-	while ((opt = getopt(argc, argv, "f")) != -1)
+	while ((opt = getopt(argc, argv, "fr:")) != -1)
 	{
 		switch (opt)
 		{
 		case 'f':
 			solomode = true;
+			break;
+		case 'r':
+			forcedrate = _ttoi(optarg);
 			break;
 		default:
 			return usage(argv[0]);
@@ -86,7 +91,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		// Append the .gif extension to the input name.
 		outstring += _T(".gif");
 	}
-	GIFWriter writer(outstring, solomode);
+	GIFWriter writer(outstring, solomode, forcedrate);
 	LoadFile(argv[1], infile, writer);
 	return 0;
 }

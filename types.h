@@ -48,6 +48,7 @@ extern "C" {
 #define _tcserror strerror
 #define _tcsrchr strrchr
 #define _tcscmp strcmp
+#define _ttoi atoi
 #define to_tstring std::to_string
 #endif
 

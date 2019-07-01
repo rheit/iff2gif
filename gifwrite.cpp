@@ -56,9 +56,13 @@ private:
 void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const uint8_t *prev, const uint8_t *chunky,
 	int pitch, uint8_t mincodesize, int trans);
 
-GIFWriter::GIFWriter(tstring filename, bool solo)
-	: BaseFilename(filename), SoloMode(solo)
+GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate)
+	: BaseFilename(filename), SoloMode(solo), ForcedFrameRate(forcedrate > 0)
 {
+	if (forcedrate > 0)
+	{
+		FrameRate = forcedrate;
+	}
 	memset(&LSD, 0, sizeof(LSD));
 	memset(GlobalPal, 0, sizeof(GlobalPal));
 	if (solo)
@@ -188,7 +192,7 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 	{
 		WriteHeader(true);
 	}
-	if (bitmap->Rate > 0)
+	if (bitmap->Rate > 0 && !ForcedFrameRate)
 	{
 		FrameRate = bitmap->Rate;
 	}
