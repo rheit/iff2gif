@@ -152,6 +152,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="chunky.cpp" />
     <ClCompile Include="getopt.c" />
     <ClCompile Include="gifwrite.cpp" />
     <ClCompile Include="iff2gif.cpp" />

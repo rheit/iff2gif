@@ -41,7 +41,27 @@ struct PlanarBitmap
 	~PlanarBitmap();
 
 	void FillBitplane(int plane, bool set);
-	void ToChunky(void *dest);
+
+	// destextrawidth is the number of pixels between the end of the row
+	// in the source image and the end of the row in the dest image.
+	void ToChunky(void *dest, int destextrawidth) const;
+};
+
+struct ChunkyBitmap
+{
+	int Width = 0, Height = 0, Pitch = 0;
+	uint8_t *Pixels = nullptr;
+
+	ChunkyBitmap() {}
+	ChunkyBitmap(const PlanarBitmap &o, int scalex = 1, int scaley = 1);
+	ChunkyBitmap(const ChunkyBitmap &o, int fillcolor);
+	ChunkyBitmap(ChunkyBitmap &&o) noexcept;
+	ChunkyBitmap &ChunkyBitmap::operator=(ChunkyBitmap &&o) noexcept;
+	~ChunkyBitmap();
+
+	bool IsEmpty() noexcept { return Pixels == nullptr; }
+	void Clear(bool release=true) noexcept;
+	void SetSolidColor(int color) noexcept;
 };
 
 class IFFChunk
@@ -168,7 +188,7 @@ public:
 private:
 	FILE *File = nullptr;
 	tstring BaseFilename;
-	uint8_t *PrevFrame = nullptr;
+	ChunkyBitmap PrevFrame;
 	GIFFrameQueue WriteQueue;
 	uint32_t FrameCount = 0;
 	uint32_t TotalTicks = 0;
@@ -190,11 +210,11 @@ private:
 
 	static int ExtendPalette(ColorRegister *dest, const ColorRegister *src, int numentries);
 	void WriteHeader(bool loop);
-	void MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky);
-	void MinimumArea(const uint8_t *prev, const uint8_t *cur, ImageDescriptor &imd);
-	void DetectBackgroundColor(PlanarBitmap *bitmap, const uint8_t *chunky);
-	uint8_t SelectDisposal(PlanarBitmap *bitmap, ImageDescriptor &imd, const uint8_t *chunky);
-	int SelectTransparentColor(const uint8_t *prev, const uint8_t *now, const ImageDescriptor &imd, int pitch);
+	void MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky);
+	void MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd);
+	void DetectBackgroundColor(PlanarBitmap *bitmap, const ChunkyBitmap &chunky);
+	uint8_t SelectDisposal(const PlanarBitmap *bitmap, const ImageDescriptor &imd, const ChunkyBitmap &chunky);
+	int SelectTransparentColor(const ChunkyBitmap &prev, const ChunkyBitmap &now, const ImageDescriptor &imd);
 	bool FinishFile();	// Finish writing the file. Returns true on success.
 	void BadWrite();
 	void CheckForIndexSpot();

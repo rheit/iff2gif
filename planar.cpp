@@ -98,7 +98,7 @@ void PlanarBitmap::FillBitplane(int plane, bool set)
 //    1-8: one byte
 //	 9-16: two bytes
 //  17-32: four bytes
-void PlanarBitmap::ToChunky(void *dest)
+void PlanarBitmap::ToChunky(void *dest, int destextrawidth) const
 {
 	if (NumPlanes <= 0)
 	{
@@ -146,6 +146,7 @@ void PlanarBitmap::ToChunky(void *dest)
 				}
 				*out++ = pixel;
 			}
+			out += destextrawidth;
 			in += Pitch;
 		}
 #endif
@@ -166,6 +167,7 @@ void PlanarBitmap::ToChunky(void *dest)
 				}
 				*out++ = pixel;
 			}
+			out += destextrawidth;
 			in += Pitch;
 		}
 	}
@@ -185,6 +187,7 @@ void PlanarBitmap::ToChunky(void *dest)
 				}
 				*out++ = pixel;
 			}
+			out += destextrawidth;
 			in += Pitch;
 		}
 	}

@@ -53,8 +53,8 @@ private:
 	void DumpAccum(bool full);
 };
 
-void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const uint8_t *prev, const uint8_t *chunky,
-	int pitch, uint8_t mincodesize, int trans);
+void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const ChunkyBitmap &cbprev,
+	const ChunkyBitmap &chunky, uint8_t mincodesize, int trans);
 
 GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate,
 	std::vector<std::pair<unsigned, unsigned>> &clips)
@@ -85,10 +85,6 @@ GIFWriter::~GIFWriter()
 		WriteHeader(false);
 	}
 	FinishFile();
-	if (PrevFrame != nullptr)
-	{
-		delete[] PrevFrame;
-	}
 }
 
 bool GIFWriter::FinishFile()
@@ -176,8 +172,7 @@ static int numdigits(int num)
 
 void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 {
-	uint8_t *chunky = new uint8_t[bitmap->Width * bitmap->Height];
-	bitmap->ToChunky(chunky);
+	ChunkyBitmap chunky(*bitmap, 1, 1);
 	if (FrameCount == 0)
 	{
 		printf("%dx%dx%d\n", bitmap->Width, bitmap->Height, bitmap->NumPlanes);
@@ -207,7 +202,7 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 			{
 				WriteHeader(true);
 			}
-			MakeFrame(bitmap, chunky);
+			MakeFrame(bitmap, std::move(chunky));
 		}
 		if (FrameCount == Clips[0].second)
 		{
@@ -302,13 +297,13 @@ int GIFWriter::ExtendPalette(ColorRegister *dest, const ColorRegister *src, int 
 	return p;
 }
 
-void GIFWriter::MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky)
+void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 {
 	GIFFrame newframe, *oldframe;
 
 	WriteQueue.SetDropFrames(SoloMode ? 0 : bitmap->Interleave);
-	newframe.IMD.Width = LittleShort(bitmap->Width);
-	newframe.IMD.Height = LittleShort(bitmap->Height);
+	newframe.IMD.Width = LittleShort(chunky.Width);
+	newframe.IMD.Height = LittleShort(chunky.Height);
 
 	// Is there a transparent color?
 	if (bitmap->TransparentColor >= 0)
@@ -335,14 +330,14 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky)
 		}
 	}
 	// Identify the minimum rectangle that needs to be updated.
-	if (PrevFrame != NULL)
+	if (!PrevFrame.IsEmpty())
 	{
 		MinimumArea(PrevFrame, chunky, newframe.IMD);
 	}
 	// Replaces unchanged pixels with a transparent color, if there's room in the palette.
 	int trans;
 	bool temptrans = false;
-	if (WriteQueue.Total() == 0 || PrevFrame == NULL || (newframe.GCE.Flags & 0x1C0) == 0x80)
+	if (WriteQueue.Total() == 0 || PrevFrame.IsEmpty() || (newframe.GCE.Flags & 0x1C0) == 0x80)
 	{
 		trans = -1;
 	}
@@ -352,7 +347,7 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky)
 	}
 	else
 	{
-		trans = SelectTransparentColor(PrevFrame, chunky, newframe.IMD, bitmap->Width);
+		trans = SelectTransparentColor(PrevFrame, chunky, newframe.IMD);
 		if (trans >= 0)
 		{
 			newframe.GCE.Flags |= 1;
@@ -361,13 +356,13 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky)
 		}
 	}
 	// Compressed the image data
-	LZWCompress(newframe.LZW, newframe.IMD, PrevFrame, chunky, bitmap->Width, bitmap->NumPlanes, trans);
+	LZWCompress(newframe.LZW, newframe.IMD, PrevFrame, chunky, bitmap->NumPlanes, trans);
 	// If we did transparent substitution, try again without. Sometimes it compresses
 	// better if we don't do that.
 	if (trans >= 0)
 	{
 		std::vector<uint8_t> try2;
-		LZWCompress(try2, newframe.IMD, PrevFrame, chunky, bitmap->Width, bitmap->NumPlanes, -1);
+		LZWCompress(try2, newframe.IMD, PrevFrame, chunky, bitmap->NumPlanes, -1);
 		size_t l = newframe.LZW.size();
 		size_t r = try2.size();
 		if (try2.size() <= newframe.LZW.size())
@@ -385,44 +380,35 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, uint8_t *chunky)
 	{
 		BadWrite();
 	}
-	// Remember this frame's pixels
-	if (PrevFrame != NULL)
-	{
-		delete[] PrevFrame;
-	}
 	if (SoloMode)
 	{
-		delete[] chunky;
-		chunky = nullptr;
+		chunky.Clear();
 	}
-	PrevFrame = chunky;
+	PrevFrame = std::move(chunky);
 }
 
-void GIFWriter::DetectBackgroundColor(PlanarBitmap *bitmap, const uint8_t *chunky)
+void GIFWriter::DetectBackgroundColor(PlanarBitmap *bitmap, const ChunkyBitmap &chunky)
 {
 	// The GIF specification includes a background color. CompuServe probably actually
 	// used this. In practice, modern viewers just make the background be transparent
-	// and completely ignore the background color. Which means that if an image is
-	// surrounded by a solid border, we can't optimize by turning that into the
-	// background color and only writing the non-border area of the image unless
-	// the border is transparent.
+	// and completely ignore the background color. So really, the background color is
+	// either the same as the transparent color, or it doesn't matter what it is.
 
 	// If there is a transparent color, let it be the background.
 	if (bitmap->TransparentColor >= 0)
 	{
 		BkgColor = bitmap->TransparentColor;
-		assert(PrevFrame == NULL);
-		PrevFrame = new uint8_t[bitmap->Width * bitmap->Height];
-		memset(PrevFrame, BkgColor, bitmap->Width * bitmap->Height);
+		assert(PrevFrame.IsEmpty());
+		PrevFrame = ChunkyBitmap(chunky, BkgColor);
 	}
-	// Else, what the fuck ever. It doesn't matter.
+	// Else, whatever. It doesn't matter.
 	else
 	{
 		BkgColor = 0;
 	}
 }
 
-void GIFWriter::MinimumArea(const uint8_t *prev, const uint8_t *cur, ImageDescriptor &imd)
+void GIFWriter::MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd)
 {
 	int32_t start = -1;
 	int32_t end = imd.Width * imd.Height;
@@ -432,7 +418,7 @@ void GIFWriter::MinimumArea(const uint8_t *prev, const uint8_t *cur, ImageDescri
 	// Scan from beginning to find first changed pixel.
 	while (++start < end)
 	{
-		if (prev[start] != cur[start])
+		if (prev.Pixels[start] != cur.Pixels[start])
 			break;
 	}
 	if (start == end)
@@ -445,7 +431,7 @@ void GIFWriter::MinimumArea(const uint8_t *prev, const uint8_t *cur, ImageDescri
 	// Scan from end to find last changed pixel.
 	while (--end > start)
 	{
-		if (prev[end] != cur[end])
+		if (prev.Pixels[end] != cur.Pixels[end])
 			break;
 	}
 	// Now we know the top and bottom of the changed area, but not the left and right.
@@ -457,7 +443,7 @@ void GIFWriter::MinimumArea(const uint8_t *prev, const uint8_t *cur, ImageDescri
 		p = top * imd.Width + x;
 		for (int y = top; y <= bot; ++y, p += imd.Width)
 		{
-			if (prev[p] != cur[p])
+			if (prev.Pixels[p] != cur.Pixels[p])
 				goto gotleft;
 		}
 	}
@@ -469,7 +455,7 @@ gotleft:
 		p = top * imd.Width + x;
 		for (int y = top; y <= bot; ++y, p += imd.Width)
 		{
-			if (prev[p] != cur[p])
+			if (prev.Pixels[p] != cur.Pixels[p])
 				goto gotright;
 		}
 	}
@@ -483,18 +469,18 @@ gotright:
 }
 
 // Select the disposal method for this frame.
-uint8_t GIFWriter::SelectDisposal(PlanarBitmap *planar, ImageDescriptor &imd, const uint8_t *chunky)
+uint8_t GIFWriter::SelectDisposal(const PlanarBitmap *planar, const ImageDescriptor &imd, const ChunkyBitmap &chunky)
 {
 	// If there is no transparent color, then we can keep the old frame intact.
-	if (planar->TransparentColor < 0 || PrevFrame == NULL)
+	if (planar->TransparentColor < 0 || PrevFrame.IsEmpty())
 	{
 		return 1;
 	}
 	// If no pixels are being changed to a transparent color, we can keep the old frame intact.
 	// Otherwise, we must dispose it to the background color, since that's the only way to
 	// set a pixel transparent after it's been rendered opaque.
-	const uint8_t *src = PrevFrame + imd.Left + imd.Top * planar->Width;
-	const uint8_t *dest = chunky + imd.Left + imd.Top * planar->Width;
+	const uint8_t *src = PrevFrame.Pixels + imd.Left + imd.Top * PrevFrame.Pitch;
+	const uint8_t *dest = chunky.Pixels + imd.Left + imd.Top * chunky.Pitch;
 	const uint8_t trans = planar->TransparentColor;
 	for (int y = 0; y < imd.Height; ++y)
 	{
@@ -503,10 +489,7 @@ uint8_t GIFWriter::SelectDisposal(PlanarBitmap *planar, ImageDescriptor &imd, co
 			if (src[x] != trans && dest[x] == trans)
 			{
 				// Dispose the preceding frame.
-				if (PrevFrame != NULL)
-				{
-					memset(PrevFrame, planar->TransparentColor, planar->Width * planar->Height);
-				}
+				PrevFrame.SetSolidColor(planar->TransparentColor);
 				return 2;
 			}
 		}
@@ -519,13 +502,13 @@ uint8_t GIFWriter::SelectDisposal(PlanarBitmap *planar, ImageDescriptor &imd, co
 // Compares pixels in the changed region and returns a color that is not used in the destination.
 // This can be used as a transparent color for this frame for better compression, since the
 // underlying unchanged pixels can be collapsed into a run of a single color.
-int GIFWriter::SelectTransparentColor(const uint8_t *prev, const uint8_t *now, const ImageDescriptor &imd, int pitch)
+int GIFWriter::SelectTransparentColor(const ChunkyBitmap &cbprev, const ChunkyBitmap &cbnow, const ImageDescriptor &imd)
 {
 	uint8_t used[256 / 8] = { 0 };
 	uint8_t c;
 
-	prev += imd.Left + imd.Top * pitch;
-	now += imd.Left + imd.Top * pitch;
+	const uint8_t *prev = cbprev.Pixels + imd.Left + imd.Top * cbprev.Pitch;
+	const uint8_t *now = cbnow.Pixels + imd.Left + imd.Top * cbnow.Pitch;
 	// Set a bit for every color used in the dest that changed from the preceding frame
 	for (int y = 0; y < imd.Height; ++y)
 	{
@@ -536,8 +519,8 @@ int GIFWriter::SelectTransparentColor(const uint8_t *prev, const uint8_t *now, c
 				used[c >> 3] |= 1 << (c & 7);
 			}
 		}
-		prev += pitch;
-		now += pitch;
+		prev += cbprev.Pitch;
+		now += cbnow.Pitch;
 	}
 	// Return the first unused color found. Returns -1 if they were all used.
 	for (int i = 0; i < 256 / 8; ++i)
@@ -558,8 +541,8 @@ int GIFWriter::SelectTransparentColor(const uint8_t *prev, const uint8_t *now, c
 	return -1;
 }
 
-void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const uint8_t *prev, const uint8_t *chunky,
-	int pitch, uint8_t mincodesize, int trans)
+void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const ChunkyBitmap &cbprev,
+	const ChunkyBitmap &chunky, uint8_t mincodesize, int trans)
 {
 	if (mincodesize < 2)
 	{
@@ -567,7 +550,7 @@ void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const ui
 	}
 	vec.push_back(mincodesize);
 	CodeStream codes(mincodesize, vec);
-	const uint8_t *in = chunky + imd.Left + imd.Top * pitch;
+	const uint8_t *in = chunky.Pixels + imd.Left + imd.Top * chunky.Pitch;
 	if (trans < 0)
 	{
 		for (int y = 0; y < imd.Height; ++y)
@@ -576,21 +559,21 @@ void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const ui
 			{
 				codes.AddByte(in[x]);
 			}
-			in += pitch;
+			in += chunky.Pitch;
 		}
 	}
 	else
 	{
 		const uint8_t transcolor = trans;
-		prev += imd.Left + imd.Top * pitch;
+		const uint8_t *prev = cbprev.Pixels + imd.Left + imd.Top * cbprev.Pitch;
 		for (int y = 0; y < imd.Height; ++y)
 		{
 			for (int x = 0; x < imd.Width; ++x)
 			{
 				codes.AddByte(prev[x] != in[x] ? in[x] : transcolor);
 			}
-			in += pitch;
-			prev += pitch;
+			in += chunky.Pitch;
+			prev += cbprev.Pitch;
 		}
 	}
 }
