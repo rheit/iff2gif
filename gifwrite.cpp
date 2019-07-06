@@ -708,7 +708,7 @@ GIFFrame::GIFFrame()
 	IMD.Flags = 0;
 }
 
-GIFFrame::GIFFrame(const GIFFrame&& o) noexcept
+GIFFrame::GIFFrame(GIFFrame&& o) noexcept
 {
 	*this = std::move(o);
 }

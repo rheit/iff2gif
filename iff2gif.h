@@ -133,7 +133,7 @@ struct ImageDescriptor
 struct GIFFrame
 {
 	GIFFrame();
-	GIFFrame(const GIFFrame&& o) noexcept;
+	GIFFrame(GIFFrame&& o) noexcept;
 	GIFFrame &operator= (const GIFFrame &o);
 	GIFFrame &operator= (GIFFrame &&o) noexcept;
 
