@@ -33,6 +33,7 @@ struct PlanarBitmap
 	int TransparentColor = -1;
 	int Delay = 0;
 	int Rate = 60;
+	uint8_t Interleave = 0;
 	uint8_t Interleave;
 	int NumFrames = 0;				// A hint, not authoritative
 
