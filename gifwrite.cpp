@@ -45,7 +45,28 @@ private:
 	uint8_t CodeSize;		// in bits
 	uint8_t MinCodeSize;
 	int8_t BitPos;
-	uint8_t Chunk[256];	// first byte is length
+	uint8_t Chunk[256];		// first byte is length
+
+	// The dictionary maps code strings to code words. Each possible pixel
+	// value [0..size of pallete) is automatically its own code word. A code
+	// string consists of a code word plus an appended pixel value. The first
+	// time a code string is encountered, it is inserted into the dictionary
+	// and becomes another code word. Thus, it is enough to represent a code
+	// string as a code word plus a single value appended to it. In this case,
+	// the code string is represented as a 25-bit value arranged as:
+	//
+	//     2         1         0  \ bit
+	// 4321098765432109876543210  / number
+	//          ^^^^^^^^^^^^^^^^  code word
+	//  ^^^^^^^^ value appended to code word
+	// 1 <- indicates that this is a code string
+	//
+	// GIF limits the code word to 12 bits, so 16 bits is overkill, but it's
+	// nice for viewing it as a hexadecimal number. There are 8 bits for the
+	// appended value, since GIF works with at-most 8 bits per pixel. Bit 24
+	// is always set in order to disambiguate between a lone code word and a
+	// code string where the appended value is 0.
+
 	typedef std::unordered_map<uint32_t, uint16_t> DictType;
 	DictType Dict;
 
