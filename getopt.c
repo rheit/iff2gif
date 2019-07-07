@@ -47,7 +47,7 @@ Path : utzoo!decvax!decwrl!ucbvax!ucdavis!lll - crg!seismo!ut - sally!std - unix
 #include <stdio.h>
 #include "types.h"
 
-#define ERR(s, c)	if(opterr) { _ftprintf(stderr, _T("%s%s%c"), argv[0], s, c); }
+#define ERR(s, c)	if(opterr) { _ftprintf(stderr, _T("%s%s%c\n"), argv[0], s, c); }
 
 int	opterr = 1;
 int	optind = 1;
