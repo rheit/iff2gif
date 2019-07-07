@@ -62,6 +62,10 @@ struct ChunkyBitmap
 	bool IsEmpty() noexcept { return Pixels == nullptr; }
 	void Clear(bool release=true) noexcept;
 	void SetSolidColor(int color) noexcept;
+
+	// Expand an image in the upper left corner of the bitmap to fill the
+	// entire bitmap.
+	void Expand(int scalex, int scaley) noexcept;
 };
 
 class IFFChunk
@@ -179,7 +183,7 @@ private:
 class GIFWriter
 {
 public:
-	GIFWriter(tstring filename, bool solo, int forcedrate,
+	GIFWriter(tstring filename, bool solo, int forcedrate, int scalex, int scaley,
 		std::vector<std::pair<unsigned, unsigned>> &clips);
 	~GIFWriter();
 
@@ -199,6 +203,7 @@ private:
 	uint16_t PageWidth = 0, PageHeight = 0;
 	ColorRegister GlobalPal[256];
 	uint8_t GlobalPalBits = 0;
+	int ScaleX = 1, ScaleY = 1;
 	bool ForcedFrameRate;
 	std::vector<std::pair<unsigned, unsigned>> Clips;
 

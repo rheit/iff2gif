@@ -77,10 +77,13 @@ private:
 void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const ChunkyBitmap &cbprev,
 	const ChunkyBitmap &chunky, uint8_t mincodesize, int trans);
 
-GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate,
+GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate, int scalex, int scaley,
 	std::vector<std::pair<unsigned, unsigned>> &clips)
-	: BaseFilename(filename), SoloMode(solo), ForcedFrameRate(forcedrate > 0), Clips(clips)
+	: BaseFilename(filename), SoloMode(solo), ScaleX(scalex), ScaleY(scaley),
+	  ForcedFrameRate(forcedrate > 0), Clips(clips)
 {
+	assert(ScaleX >= 1);
+	assert(ScaleY >= 1);
 	if (forcedrate > 0)
 	{
 		FrameRate = forcedrate;
@@ -193,12 +196,12 @@ static int numdigits(int num)
 
 void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 {
-	ChunkyBitmap chunky(*bitmap, 1, 1);
+	ChunkyBitmap chunky(*bitmap, ScaleX, ScaleY);
 	if (FrameCount == 0)
 	{
 		printf("%dx%dx%d\n", bitmap->Width, bitmap->Height, bitmap->NumPlanes);
-		PageWidth = bitmap->Width;
-		PageHeight = bitmap->Height;
+		PageWidth = chunky.Width;
+		PageHeight = chunky.Height;
 		GlobalPalBits = ExtendPalette(GlobalPal, bitmap->Palette, bitmap->PaletteSize);
 		DetectBackgroundColor(bitmap, chunky);
 		if (SFrameLength == 0)
@@ -323,8 +326,8 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 	GIFFrame newframe, *oldframe;
 
 	WriteQueue.SetDropFrames(SoloMode ? 0 : bitmap->Interleave);
-	newframe.IMD.Width = LittleShort(chunky.Width);
-	newframe.IMD.Height = LittleShort(chunky.Height);
+	newframe.IMD.Width = chunky.Width;
+	newframe.IMD.Height = chunky.Height;
 
 	// Is there a transparent color?
 	if (bitmap->TransparentColor >= 0)
@@ -668,6 +671,7 @@ void CodeStream::DumpAccum(bool full)
 
 void CodeStream::AddByte(uint8_t p)
 {
+	assert(p < (1 << MinCodeSize) && "p must be within the palette");
 	if (Match < 0)
 	{ // Start a new run. We know p is always in the dictionary.
 		Match = p;

@@ -24,14 +24,21 @@
 static int usage(_TCHAR *progname)
 {
 	_ftprintf(stderr, _T(
-"Usage: %s [-c <frames>] [-f] [-r <frame rate>] <source IFF> [dest GIF]\n"
-"    -c  Clip out only the specified frames from the source. This is a comma-\n"
-"        separated range of frames of the form \"start-end\" or single frames.\n"
-"    -f  Save each frame to a separate file. If consecutive '0's are present\n"
-"        at the end of [dest GIF], they will be replaced with the frame\n"
-"        number. Otherwise, the frame number will be inserted before the\n"
-"        .gif extension.\n"
-"    -r  Specify a frame rate to use instead of the one in the ANIM.\n"),
+"Usage: %s [options] <source IFF> [dest GIF]\n"
+"  Options:\n"
+"    -c <frames>      Clip out only the specified frames from the source.\n"
+"                     This is a comma-separated range of frames of the\n"
+"                     form \"start-end\" or a single frame number.\n"
+"    -f               Save each frame to a separate file. If consecutive\n"
+"                     '0's are present at the end of [dest GIF], they will\n"
+"                     be replaced with the frame number. Otherwise, the\n"
+"                     frame number will be inserted before the .gif\n"
+"                     extension.\n"
+"    -r <frame rate>  Override the frame rate from the ANIM.\n"
+"    -x <x scale>     Scale image horizontally. Must be at least 1.\n"
+"    -y <y scale>     Scale image vertically. Must be at least 1.\n"
+"    -s <scale>       Set both horizontal and vertical scale.\n"
+),
 		progname);
 	return 1;
 }
@@ -92,9 +99,10 @@ int _tmain(int argc, _TCHAR* argv[])
 	int opt;
 	bool solomode = false;
 	int forcedrate = 0;
+	int scalex = 1, scaley = 1;
 	std::vector<std::pair<unsigned, unsigned>> clips;
 
-	while ((opt = getopt(argc, argv, "fr:c:")) != -1)
+	while ((opt = getopt(argc, argv, "fr:c:x:y:s:")) != -1)
 	{
 		switch (opt)
 		{
@@ -108,10 +116,26 @@ int _tmain(int argc, _TCHAR* argv[])
 			if (!parseclip(clips, optarg))
 				return 1;
 			break;
+		case 'x':
+			scalex = _ttoi(optarg);
+			break;
+		case 'y':
+			scaley = _ttoi(optarg);
+			break;
+		case 's':
+			scalex = scaley = _ttoi(optarg);
+			break;
 		default:
 			return usage(argv[0]);
 		}
 	}
+
+	if (scalex < 1 || scaley < 1)
+	{
+		_ftprintf(stderr, _T("Scale must be at least 1\n"));
+		return 1;
+	}
+
 	sortclips(clips);
 
 	if (optind >= argc)
@@ -123,7 +147,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	if (!infile.is_open())
 	{
 		_ftprintf(stderr, _T("Could not open %s: %s\n"), inparm, _tcserror(errno));
-		return 1;
+		return 2;
 	}
 	if (optind + 1 < argc)
 	{
@@ -147,7 +171,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		// Append the .gif extension to the input name.
 		outstring += _T(".gif");
 	}
-	GIFWriter writer(outstring, solomode, forcedrate, clips);
+	GIFWriter writer(outstring, solomode, forcedrate, scalex, scaley, clips);
 	LoadFile(argv[1], infile, writer);
 	return 0;
 }

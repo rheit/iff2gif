@@ -16,15 +16,24 @@
 ** along with iff2gif. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <assert.h>
 #include "iff2gif.h"
 
 ChunkyBitmap::ChunkyBitmap(const PlanarBitmap &planar, int scalex, int scaley)
 	: Width(planar.Width * scalex), Height(planar.Height * scaley)
 {
+	assert(Width != 0);
+	assert(Height != 0);
+	assert(scalex != 0);
+	assert(scaley != 0);
 	int bytesperpixel = planar.NumPlanes <= 8 ? 1 : planar.NumPlanes <= 16 ? 2 : 4;
 	Pitch = Width * bytesperpixel;
 	Pixels = new uint8_t[Pitch * Height];
 	planar.ToChunky(Pixels, Width - planar.Width);
+	if (scalex != 1 || scaley != 1)
+	{
+		Expand(scalex, scaley);
+	}
 }
 
 // Creates a new chunky bitmap with the same dimensions as o, but filled with fillcolor.
@@ -83,5 +92,43 @@ void ChunkyBitmap::SetSolidColor(int color) noexcept
 	if (Pixels != nullptr)
 	{
 		memset(Pixels, color, Pitch * Height);
+	}
+}
+
+// Expansion is done in-place, with the original image located
+// in the upper-left corner of the "destination" image.
+void ChunkyBitmap::Expand(int scalex, int scaley) noexcept
+{
+	if (scalex == 1 && scaley == 1)
+		return;
+
+	// Work bottom-to-top, right-to-left.
+	int srcwidth = Width / scalex;
+	int srcheight = Height / scaley;
+	const uint8_t *src = Pixels + (srcheight - 1) * Pitch;	// src points to the beginning of the line
+	uint8_t *dest = Pixels + (Height - 1) * Pitch + Width;	// dest points just past the end of the line
+
+	for (int sy = srcheight; sy > 0; --sy, src -= Pitch)
+	{
+		int yy = scaley;
+		const uint8_t *ysrc;
+
+		// If expanding both horizontally and vertically, each source row only needs
+		// to be expanded once because the vertical expansion can copy the already-
+		// expanded line the rest of the way.
+		if (scalex != 1)
+		{ // Expand horizontally
+			for (int sx = srcwidth - 1; sx >= 0; --sx)
+				for (int xx = scalex; xx > 0; --xx)
+					*--dest = src[sx];
+			ysrc = dest;
+			yy--;
+		}
+		else
+		{ // Copy straight from source
+			ysrc = src;
+		}
+		for (; yy > 0; --yy, dest -= Pitch)
+			memcpy(dest - Pitch, ysrc, Pitch);
 	}
 }
