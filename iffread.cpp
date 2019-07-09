@@ -694,12 +694,6 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 
 		case ID_CAMG:
 			modeid = BigLong(*(const uint32_t *)chunk->GetData());
-			// Check for bogus CAMG like some brushes have, with junk in
-			// upper word and extended bit NOT set not set in lower word.
-			if ((modeid & 0xFFFF0000) && (!(modeid & EXTENDED_MODE)))
-			{
-				modeid = 0;
-			}
 			break;
 
 		case ID_DEST:
@@ -741,6 +735,15 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			{
 				FixOCSPalette(planes);
 			}
+			// Check for bogus CAMG like some brushes have, with junk in
+			// upper word and extended bit NOT set not set in lower word.
+			if ((modeid & 0xFFFF0000) && (!(modeid & EXTENDED_MODE)))
+			{
+				// Bad CAMG, so ignore CAMG and determine a mode based on page size.
+				modeid = 0;
+				if (header.pageWidth >= 640) modeid |= HIRES;
+				if (header.pageHeight >= 400) modeid |= LACE;
+			}
 			if (modeid & EXTRA_HALFBRITE)
 			{
 				MakeEHBPalette(planes);
@@ -750,6 +753,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 				fprintf(stderr, "Note: HAM mode is not supported\n");
 			}
 			UnpackBody(planes, header, chunk->GetLen(), chunk->GetData());
+			planes->ModeID = modeid;
 			break;
 
 		case ID_DLTA:

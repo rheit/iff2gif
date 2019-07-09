@@ -78,9 +78,9 @@ void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const Ch
 	const ChunkyBitmap &chunky, uint8_t mincodesize, int trans);
 
 GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate, int scalex, int scaley,
-	std::vector<std::pair<unsigned, unsigned>> &clips)
+	bool aspectscale, std::vector<std::pair<unsigned, unsigned>> &clips)
 	: BaseFilename(filename), SoloMode(solo), ScaleX(scalex), ScaleY(scaley),
-	  ForcedFrameRate(forcedrate > 0), Clips(clips)
+	  AutoAspectScale(aspectscale), ForcedFrameRate(forcedrate > 0), Clips(clips)
 {
 	assert(ScaleX >= 1);
 	assert(ScaleY >= 1);
@@ -196,9 +196,21 @@ static int numdigits(int num)
 
 void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 {
-	ChunkyBitmap chunky(*bitmap, ScaleX, ScaleY);
-	if (FrameCount == 0)
+	// Do aspect ratio correction for appropriate ModeIDs.
+	if (AutoAspectScale && FrameCount == 0)
 	{
+		switch (bitmap->ModeID & (LACE | HIRES | SUPERHIRES))
+		{
+		case LACE:				ScaleX *= 2; break;
+		case HIRES:				ScaleY *= 2; break;
+		case SUPERHIRES:		ScaleY *= 4; break;
+		case SUPERHIRES | LACE:	ScaleY *= 2; break;
+		}
+	}
+	ChunkyBitmap chunky(*bitmap, ScaleX, ScaleY);
+
+	if (FrameCount == 0)
+	{ // Initialize some values from the initial frame.
 		printf("%dx%dx%d\n", bitmap->Width, bitmap->Height, bitmap->NumPlanes);
 		PageWidth = chunky.Width;
 		PageHeight = chunky.Height;

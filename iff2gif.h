@@ -34,8 +34,8 @@ struct PlanarBitmap
 	int Delay = 0;
 	int Rate = 60;
 	uint8_t Interleave = 0;
-	uint8_t Interleave;
 	int NumFrames = 0;				// A hint, not authoritative
+	int ModeID = 0;
 
 	PlanarBitmap(int w, int h, int nPlanes);
 	PlanarBitmap(const PlanarBitmap &o);
@@ -185,7 +185,7 @@ class GIFWriter
 {
 public:
 	GIFWriter(tstring filename, bool solo, int forcedrate, int scalex, int scaley,
-		std::vector<std::pair<unsigned, unsigned>> &clips);
+		bool aspectscale, std::vector<std::pair<unsigned, unsigned>> &clips);
 	~GIFWriter();
 
 	void AddFrame(PlanarBitmap *bitmap);
@@ -205,6 +205,7 @@ private:
 	ColorRegister GlobalPal[256];
 	uint8_t GlobalPalBits = 0;
 	int ScaleX = 1, ScaleY = 1;
+	bool AutoAspectScale;
 	bool ForcedFrameRate;
 	std::vector<std::pair<unsigned, unsigned>> Clips;
 

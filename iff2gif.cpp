@@ -34,6 +34,7 @@ static int usage(_TCHAR *progname)
 "                     be replaced with the frame number. Otherwise, the\n"
 "                     frame number will be inserted before the .gif\n"
 "                     extension.\n"
+"    -n               No aspect ratio correction for (super)hires/interlace.\n"
 "    -r <frame rate>  Override the frame rate from the ANIM.\n"
 "    -x <x scale>     Scale image horizontally. Must be at least 1.\n"
 "    -y <y scale>     Scale image vertically. Must be at least 1.\n"
@@ -100,9 +101,10 @@ int _tmain(int argc, _TCHAR* argv[])
 	bool solomode = false;
 	int forcedrate = 0;
 	int scalex = 1, scaley = 1;
+	bool aspectscale = true;
 	std::vector<std::pair<unsigned, unsigned>> clips;
 
-	while ((opt = getopt(argc, argv, "fr:c:x:y:s:")) != -1)
+	while ((opt = getopt(argc, argv, "fr:c:x:y:s:n")) != -1)
 	{
 		switch (opt)
 		{
@@ -124,6 +126,9 @@ int _tmain(int argc, _TCHAR* argv[])
 			break;
 		case 's':
 			scalex = scaley = _ttoi(optarg);
+			break;
+		case 'n':
+			aspectscale = false;
 			break;
 		default:
 			return usage(argv[0]);
@@ -171,7 +176,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		// Append the .gif extension to the input name.
 		outstring += _T(".gif");
 	}
-	GIFWriter writer(outstring, solomode, forcedrate, scalex, scaley, clips);
+	GIFWriter writer(outstring, solomode, forcedrate, scalex, scaley, aspectscale, clips);
 	LoadFile(argv[1], infile, writer);
 	return 0;
 }
