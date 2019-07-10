@@ -661,32 +661,35 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 
 		case ID_CMAP:
 		{
-			if (!planes)
+			if (!planes && !anhdread)
 			{
-				fprintf(stderr, "Colormap encountered before bitmap header\n");
-				return NULL;
+				fprintf(stderr, "Colormap encountered before header\n");
+				return nullptr;
 			}
-			int palsize = (chunk->GetLen() + 2) / 3;	// support truncated palettes
-			planes->Palette = new ColorRegister[palsize];
-			planes->PaletteSize = palsize;
-			planes->Palette[palsize - 1].blue = planes->Palette[palsize - 1].green = 0;
-			memcpy(planes->Palette, chunk->GetData(), chunk->GetLen());
-			if (palsize <= 32)
+			if (planes)
 			{
-				int i;
-				for (i = 0; i < palsize; ++i)
+				int palsize = (chunk->GetLen() + 2) / 3;	// support truncated palettes
+				planes->Palette = new ColorRegister[palsize];
+				planes->PaletteSize = palsize;
+				planes->Palette[palsize - 1].blue = planes->Palette[palsize - 1].green = 0;
+				memcpy(planes->Palette, chunk->GetData(), chunk->GetLen());
+				if (palsize <= 32)
 				{
-					if ((planes->Palette[i].red & 0x0F) != 0 ||
-						(planes->Palette[i].green & 0x0F) != 0 ||
-						(planes->Palette[i].blue & 0x0F) != 0)
+					int i;
+					for (i = 0; i < palsize; ++i)
 					{
-						break;
+						if ((planes->Palette[i].red & 0x0F) != 0 ||
+							(planes->Palette[i].green & 0x0F) != 0 ||
+							(planes->Palette[i].blue & 0x0F) != 0)
+						{
+							break;
+						}
 					}
-				}
-				if (i == palsize)
-				{ // Made it the whole way through. It's probably an
-				  // improperly written OCS palette.
-					ocspal = true;
+					if (i == palsize)
+					{ // Made it the whole way through. It's probably an
+					  // improperly written OCS palette.
+						ocspal = true;
+					}
 				}
 			}
 			break;
