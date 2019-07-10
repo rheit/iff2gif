@@ -436,10 +436,10 @@ void Delta8Short(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const voi
 		{ // No ops for this plane.
 			continue;
 		}
-		const uint16_t *ops = (const uint16_t *)delta + ptr;
+		const uint16_t *ops = (const uint16_t *)((const uint8_t *)delta + ptr);
 		for (int x = 0; x < numcols; ++x)
 		{
-			uint16_t *pixel = (uint16_t *)(bitmap->Planes[p] + x);
+			uint16_t *pixel = (uint16_t *)bitmap->Planes[p] + x;
 			uint16_t *stop = pixel + bitmap->Height * pitch;
 			ops = Do8short(pixel, stop, ops, xormask, pitch);
 		}
@@ -503,10 +503,10 @@ void Delta8Long(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void
 		{ // No ops for this plane.
 			continue;
 		}
-		const uint32_t *ops = (const uint32_t *)delta + ptr;
+		const uint32_t *ops = (const uint32_t *)((const uint8_t *)delta + ptr);
 		for (int x = 0; x < numcols; ++x)
 		{
-			uint32_t *pixel = (uint32_t *)(bitmap->Planes[p] + x);
+			uint32_t *pixel = (uint32_t *)bitmap->Planes[p] + x;
 			uint32_t *stop = (uint32_t *)((uint8_t *)pixel + bitmap->Height * pitch);
 			if (x == numcols - 1 && lastisshort)
 			{
