@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <assert.h>
 #include <string.h>
 #include <malloc.h>
 #include <math.h>
@@ -766,7 +767,11 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 		{
 			fprintf(stderr, "Note: HAM mode is not supported\n");
 		}
-		planes->Palette = palette;
+		// Only overwrite the palette if we loaded a new one.
+		if (!palette.empty())
+		{
+			planes->Palette = palette;
+		}
 		planes->ModeID = modeid;
 		if (speed > 0)
 		{
@@ -801,6 +806,15 @@ static void LoadANIM(FORMReader &form, GIFWriter &writer)
 					if (planar->Interleave != 1)
 					{
 						std::swap(history[0], history[1]);
+					}
+					// Keep the palette in sync on both buffers
+					if (planar == history[1])
+					{
+						history[0]->Palette = planar->Palette;
+					}
+					else
+					{
+						history[1]->Palette = planar->Palette;
 					}
 				}
 			}

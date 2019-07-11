@@ -89,7 +89,6 @@ GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate, int scalex, in
 		FrameRate = forcedrate;
 	}
 	memset(&LSD, 0, sizeof(LSD));
-	memset(GlobalPal, 0, sizeof(GlobalPal));
 	if (solo)
 	{
 		CheckForIndexSpot();
@@ -289,7 +288,8 @@ void GIFWriter::WriteHeader(bool loop)
 	// Write (or skip) palette
 	if (lsd.Flags & 0x80)
 	{
-		if (fwrite(GlobalPal, 3, (size_t)1 << GlobalPalBits, File) != (size_t)1 << GlobalPalBits)
+		assert(GlobalPal.size() == (size_t)1 << GlobalPalBits);
+		if (fwrite(&GlobalPal[0], 3, GlobalPal.size(), File) != GlobalPal.size())
 		{
 			BadWrite();
 			return;
@@ -307,7 +307,7 @@ void GIFWriter::WriteHeader(bool loop)
 }
 
 // GIF palettes must be a power of 2 in size. CMAP chunks have no such restriction.
-int GIFWriter::ExtendPalette(ColorRegister *dest, const std::vector<ColorRegister> &src)
+int GIFWriter::ExtendPalette(std::vector<ColorRegister> &dest, const std::vector<ColorRegister> &src)
 {
 	if (src.empty())
 	{
@@ -315,10 +315,11 @@ int GIFWriter::ExtendPalette(ColorRegister *dest, const std::vector<ColorRegiste
 	}
 	// What's the closest power of 2 the palette fits in?
 	uint8_t p = 1;
-	size_t numdest = 1, i;
+	size_t numdest = 2, i;
 	while (numdest < src.size() && p < 8)
 		++p, numdest *= 2;
 
+	dest.resize(numdest);
 	// The source could potentially have more colors than we need, but also
 	// might not have enough.
 	for (i = 0; i < std::min(src.size(), numdest); ++i)
@@ -336,6 +337,7 @@ int GIFWriter::ExtendPalette(ColorRegister *dest, const std::vector<ColorRegiste
 void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 {
 	GIFFrame newframe, *oldframe;
+	bool palchanged;
 
 	WriteQueue.SetDropFrames(SoloMode ? 0 : bitmap->Interleave);
 	newframe.IMD.Width = chunky.Width;
@@ -365,15 +367,27 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 			GIFTime += delay;
 		}
 	}
+	// Check for a palette different from the one we recorded for the global color table.
+	// Unlike ANIMs, where a CMAP chunk in one frame applies to that frame and all
+	// subsequent frames until another CMAP, GIF's local color table applies only to
+	// the frame where it appears.
+	if (bitmap->Palette != GlobalPal)
+	{
+		newframe.LocalPalBits = ExtendPalette(newframe.LocalPalette, bitmap->Palette);
+	}
+	// If the palette has changed from the previous frame, we must redraw the entire frame,
+	// because decoders probably won't repaint the old area with the new palette.
+	palchanged = oldframe != nullptr && newframe.LocalPalette != oldframe->LocalPalette;
+
 	// Identify the minimum rectangle that needs to be updated.
-	if (!PrevFrame.IsEmpty())
+	if (!PrevFrame.IsEmpty() && !palchanged)
 	{
 		MinimumArea(PrevFrame, chunky, newframe.IMD);
 	}
 	// Replaces unchanged pixels with a transparent color, if there's room in the palette.
 	int trans;
 	bool temptrans = false;
-	if (WriteQueue.Total() == 0 || PrevFrame.IsEmpty() || (newframe.GCE.Flags & 0x1C0) == 0x80)
+	if (WriteQueue.Total() == 0 || PrevFrame.IsEmpty() || palchanged || (newframe.GCE.Flags & 0x1C0) == 0x80)
 	{
 		trans = -1;
 	}
@@ -755,6 +769,8 @@ GIFFrame &GIFFrame::operator= (const GIFFrame &o)
 	GCE = o.GCE;
 	IMD = o.IMD;
 	LZW = o.LZW;
+	LocalPalBits = o.LocalPalBits;
+	LocalPalette = o.LocalPalette;
 	return *this;
 }
 
@@ -763,6 +779,8 @@ GIFFrame &GIFFrame::operator= (GIFFrame &&o) noexcept
 	GCE = o.GCE;
 	IMD = o.IMD;
 	LZW = std::move(o.LZW);
+	LocalPalette = std::move(o.LocalPalette);
+	LocalPalBits = o.LocalPalBits;
 	return *this;
 }
 
@@ -778,11 +796,23 @@ bool GIFFrame::Write(FILE *file)
 				return false;
 			}
 		}
+		if (LocalPalBits > 0)
+		{
+			IMD.Flags = 0x80 | (LocalPalBits - 1);	// Set Local Color Table Flag
+		}
 		// Write the image descriptor
 		if (fputc(0x2C, file) /* Identify the Image Separator */ == EOF ||
-			fwrite(&IMD, 9, 1, file) != 1 ||
-			// Write the compressed image data
-			fwrite(&LZW[0], 1, LZW.size(), file) != LZW.size())
+			fwrite(&IMD, 9, 1, file) != 1)
+		{
+			return false;
+		}
+		// Write local color table
+		if (LocalPalBits > 0 && fwrite(&LocalPalette[0], 3, LocalPalette.size(), file) != LocalPalette.size())
+		{
+			return false;
+		}
+		// Write the compressed image data
+		if (fwrite(&LZW[0], 1, LZW.size(), file) != LZW.size())
 		{
 			return false;
 		}

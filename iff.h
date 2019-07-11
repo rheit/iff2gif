@@ -43,6 +43,11 @@ typedef struct {
 	uint8_t red, green, blue;		/* color intensities 0..255 */
 } ColorRegister;					/* size = 3 bytes			*/
 
+static bool operator== (const ColorRegister &a, const ColorRegister &b) noexcept
+{
+	return a.red == b.red && a.green == b.green && a.blue == b.blue;
+}
+
 typedef struct {
 	uint8_t depth;		/* # bitplanes in the original source				*/
 	uint8_t pad1;		/* unused; for consistency put 0 here				*/

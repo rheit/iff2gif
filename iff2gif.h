@@ -147,6 +147,8 @@ struct GIFFrame
 
 	GraphicControlExtension GCE;
 	ImageDescriptor IMD;
+	uint8_t LocalPalBits = 0;
+	std::vector<ColorRegister> LocalPalette;
 	std::vector<uint8_t> LZW;
 };
 
@@ -201,7 +203,7 @@ private:
 	LogicalScreenDescriptor LSD;
 	uint8_t BkgColor = 0;
 	uint16_t PageWidth = 0, PageHeight = 0;
-	ColorRegister GlobalPal[256];
+	std::vector<ColorRegister> GlobalPal;
 	uint8_t GlobalPalBits = 0;
 	int ScaleX = 1, ScaleY = 1;
 	bool AutoAspectScale;
@@ -214,7 +216,7 @@ private:
 	int SExtIndex = -1;		// In solo mode: Character index where extension starts
 	tstring Filename;
 
-	static int ExtendPalette(ColorRegister *dest, const std::vector<ColorRegister> &src);
+	static int ExtendPalette(std::vector<ColorRegister> &dest, const std::vector<ColorRegister> &src);
 	void WriteHeader(bool loop);
 	void MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky);
 	void MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd);
