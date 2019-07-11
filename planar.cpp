@@ -55,7 +55,6 @@ PlanarBitmap::PlanarBitmap(const PlanarBitmap &o)
 	Pitch = o.Pitch;
 	NumPlanes = o.NumPlanes;
 	Palette = o.Palette;
-	PaletteSize = o.PaletteSize;
 	TransparentColor = o.TransparentColor;
 	Interleave = o.Interleave;
 	Delay = o.Delay;

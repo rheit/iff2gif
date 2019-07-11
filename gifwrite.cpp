@@ -214,7 +214,7 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 		printf("%dx%dx%d\n", bitmap->Width, bitmap->Height, bitmap->NumPlanes);
 		PageWidth = chunky.Width;
 		PageHeight = chunky.Height;
-		GlobalPalBits = ExtendPalette(GlobalPal, bitmap->Palette, bitmap->PaletteSize);
+		GlobalPalBits = ExtendPalette(GlobalPal, bitmap->Palette);
 		DetectBackgroundColor(bitmap, chunky);
 		if (SFrameLength == 0)
 		{ // Automatically decide what should be an adequate length for the frame number
@@ -307,28 +307,28 @@ void GIFWriter::WriteHeader(bool loop)
 }
 
 // GIF palettes must be a power of 2 in size. CMAP chunks have no such restriction.
-int GIFWriter::ExtendPalette(ColorRegister *dest, const ColorRegister *src, int numsrc)
+int GIFWriter::ExtendPalette(ColorRegister *dest, const std::vector<ColorRegister> &src)
 {
-	if (numsrc <= 0)
+	if (src.empty())
 	{
 		return 0;
 	}
 	// What's the closest power of 2 the palette fits in?
 	uint8_t p = 1;
-	while (1 << p < numsrc && p < 8)
-		++p;
+	size_t numdest = 1, i;
+	while (numdest < src.size() && p < 8)
+		++p, numdest *= 2;
 
-	int numdest = 1 << p, i;
 	// The source could potentially have more colors than we need, but also
 	// might not have enough.
-	for (i = 0; i < numsrc && i < numdest; ++i)
+	for (i = 0; i < std::min(src.size(), numdest); ++i)
 	{
 		dest[i] = src[i];
 	}
 	// Set extras to grayscale
 	for (; i < numdest; ++i)
 	{
-		dest[i].blue = dest[i].green = dest[i].red = (i * 255) >> p;
+		dest[i].blue = dest[i].green = dest[i].red = uint8_t((i * 255) >> p);
 	}
 	return p;
 }

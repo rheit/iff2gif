@@ -26,8 +26,7 @@ struct PlanarBitmap
 {
 	int Width = 0, Height = 0, Pitch = 0;
 	int NumPlanes = 0;
-	int PaletteSize = 0;
-	ColorRegister *Palette = nullptr;
+	std::vector<ColorRegister> Palette;
 	uint8_t *Planes[32]{nullptr};	// Points into PlaneData
 	uint8_t *PlaneData = nullptr;
 	int TransparentColor = -1;
@@ -215,7 +214,7 @@ private:
 	int SExtIndex = -1;		// In solo mode: Character index where extension starts
 	tstring Filename;
 
-	static int ExtendPalette(ColorRegister *dest, const ColorRegister *src, int numentries);
+	static int ExtendPalette(ColorRegister *dest, const std::vector<ColorRegister> &src);
 	void WriteHeader(bool loop);
 	void MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky);
 	void MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd);

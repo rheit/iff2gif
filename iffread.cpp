@@ -146,40 +146,57 @@ bool FORMReader::NextChunk(IFFChunk **chunk, FORMReader **form)
 	return false;
 }
 
-// Some old OCS images have the bottom four bits zeroed for every entry.
-// Fix them.
-void FixOCSPalette(PlanarBitmap *planes)
+// Back in the early days of ILBM, when the Amiga only had 4 bits
+// per color channel, it was common practice to write the colormap
+// by just shifting each component left 4 bits. This is wrong on
+// anything with a higher color depth, because everything ends up
+// darker than intended.
+static bool CheckOCSPalette(const std::vector<ColorRegister> &pal)
 {
-	for (int i = 0; i < planes->PaletteSize; ++i)
+	size_t i = 0;
+
+	if (pal.size() <= 32)
 	{
-		planes->Palette[i].red |= planes->Palette[i].red >> 4;
-		planes->Palette[i].green |= planes->Palette[i].green >> 4;
-		planes->Palette[i].blue |= planes->Palette[i].blue >> 4;
+		for (i = 0; i < pal.size(); ++i)
+		{
+			if ((pal[i].red & 0x0F) != 0 ||
+				(pal[i].green & 0x0F) != 0 ||
+				(pal[i].blue & 0x0F) != 0)
+			{
+				break;
+			}
+		}
+	}
+	// If we make it all the way through the for loop, it's probably
+	// an improperly written OCS palette.
+	return i == pal.size();
+}
+
+// "Fix" the OCS palette by duplicating the high nibble into the low nibble.
+void FixOCSPalette(std::vector<ColorRegister> &pal)
+{
+	for (ColorRegister &reg : pal)
+	{
+		reg.red |= reg.red >> 4;
+		reg.green |= reg.green >> 4;
+		reg.blue |= reg.blue >> 4;
 	}
 }
 
 // In EHB mode, the palette has 64 entries, but the second 32 are implied
 // as half intensity versions of the first 64.
-void MakeEHBPalette(PlanarBitmap *planes)
+void MakeEHBPalette(std::vector<ColorRegister> &pal)
 {
-	if (planes->Palette == NULL)
+	if (pal.empty())
 	{ // What palette?
 		return;
 	}
-	if (planes->PaletteSize < 64)
-	{
-		ColorRegister *pal = new ColorRegister[64];
-		memset(pal, 0, 64 * sizeof(ColorRegister));
-		memcpy(pal, planes->Palette, planes->PaletteSize * sizeof(ColorRegister));
-		delete[] planes->Palette;
-		planes->Palette = pal;
-		planes->PaletteSize = 64;
-	}
+	pal.reserve(64);
 	for (int i = 0; i < 32; ++i)
 	{
-		planes->Palette[32 + i].red = planes->Palette[i].red >> 1;
-		planes->Palette[32 + i].green = planes->Palette[i].green >> 1;
-		planes->Palette[32 + i].blue = planes->Palette[i].blue >> 1;
+		pal[32 + i].red = pal[i].red >> 1;
+		pal[32 + i].green = pal[i].green >> 1;
+		pal[32 + i].blue = pal[i].blue >> 1;
 	}
 }
 
@@ -601,7 +618,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 	int speed = -1;
 	int numframes = 0;
 	uint32_t modeid = 0;
-	bool ocspal = false;
+	std::vector<ColorRegister> palette;
 
 	while (form.NextChunk(&chunk, NULL))
 	{
@@ -623,17 +640,17 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			header.yAspect = bhdr->yAspect;
 			header.pageWidth = BigShort(bhdr->pageWidth);
 			header.pageHeight = BigShort(bhdr->pageHeight);
+			if (header.nPlanes > 8)
+			{
+				fprintf(stderr, "Too many bitplanes (%u)\n", header.nPlanes);
+				return NULL;
+			}
 			planes = new PlanarBitmap(header.w, header.h, header.nPlanes);
 			if (header.masking == mskHasTransparentColor)
 			{
 				planes->TransparentColor = header.transparentColor;
 			}
 			planes->Rate = 60;
-			if (header.nPlanes > 8)
-			{
-				fprintf(stderr, "Too many bitplanes (%u)\n", header.nPlanes);
-				return NULL;
-			}
 			break;
 		}
 
@@ -661,36 +678,12 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 
 		case ID_CMAP:
 		{
-			if (!planes && !anhdread)
+			int palsize = (chunk->GetLen() + 2) / 3;	// support truncated palettes
+			palette.resize(palsize);
+			memcpy(&palette[0], chunk->GetData(), chunk->GetLen());
+			if (CheckOCSPalette(palette))
 			{
-				fprintf(stderr, "Colormap encountered before header\n");
-				return nullptr;
-			}
-			if (planes)
-			{
-				int palsize = (chunk->GetLen() + 2) / 3;	// support truncated palettes
-				planes->Palette = new ColorRegister[palsize];
-				planes->PaletteSize = palsize;
-				planes->Palette[palsize - 1].blue = planes->Palette[palsize - 1].green = 0;
-				memcpy(planes->Palette, chunk->GetData(), chunk->GetLen());
-				if (palsize <= 32)
-				{
-					int i;
-					for (i = 0; i < palsize; ++i)
-					{
-						if ((planes->Palette[i].red & 0x0F) != 0 ||
-							(planes->Palette[i].green & 0x0F) != 0 ||
-							(planes->Palette[i].blue & 0x0F) != 0)
-						{
-							break;
-						}
-					}
-					if (i == palsize)
-					{ // Made it the whole way through. It's probably an
-					  // improperly written OCS palette.
-						ocspal = true;
-					}
-				}
+				FixOCSPalette(palette);
 			}
 			break;
 		}
@@ -732,31 +725,10 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			if (header.compression > 1)
 			{
 				fprintf(stderr, "Unknown ILBM compression method #%d\n", header.compression);
+				delete planes;
 				return NULL;
 			}
-			if (ocspal)
-			{
-				FixOCSPalette(planes);
-			}
-			// Check for bogus CAMG like some brushes have, with junk in
-			// upper word and extended bit NOT set not set in lower word.
-			if ((modeid & 0xFFFF0000) && (!(modeid & EXTENDED_MODE)))
-			{
-				// Bad CAMG, so ignore CAMG and determine a mode based on page size.
-				modeid = 0;
-				if (header.pageWidth >= 640) modeid |= HIRES;
-				if (header.pageHeight >= 400) modeid |= LACE;
-			}
-			if (modeid & EXTRA_HALFBRITE)
-			{
-				MakeEHBPalette(planes);
-			}
-			else if (modeid & HAM)
-			{
-				fprintf(stderr, "Note: HAM mode is not supported\n");
-			}
 			UnpackBody(planes, header, chunk->GetLen(), chunk->GetData());
-			planes->ModeID = modeid;
 			break;
 
 		case ID_DLTA:
@@ -777,6 +749,25 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 	}
 	if (planes != NULL)
 	{
+		// Check for bogus CAMG like some brushes have, with junk in
+		// upper word and extended bit NOT set in lower word.
+		if ((modeid & 0xFFFF0000) && (!(modeid & EXTENDED_MODE)))
+		{
+			// Bad CAMG, so ignore CAMG and determine a mode based on page size.
+			modeid = 0;
+			if (header.pageWidth >= 640) modeid |= HIRES;
+			if (header.pageHeight >= 400) modeid |= LACE;
+		}
+		if (modeid & EXTRA_HALFBRITE)
+		{
+			MakeEHBPalette(palette);
+		}
+		else if (modeid & HAM)
+		{
+			fprintf(stderr, "Note: HAM mode is not supported\n");
+		}
+		planes->Palette = palette;
+		planes->ModeID = modeid;
 		if (speed > 0)
 		{
 			planes->Rate = speed;
