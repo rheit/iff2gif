@@ -738,12 +738,22 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 				fprintf(stderr, "Delta chunk encountered before header\n");
 				return NULL;
 			}
-			if (history == NULL || history[anheader.interleave & 1] == NULL)
+			// If planes is not null, then there was a BMHD in this frame.
+			// Use that if there is no history, otherwise prefer history.
+			if (history != NULL && history[anheader.interleave & 1] != NULL)
+			{
+				if (planes != nullptr)
+				{
+					delete planes;
+				}
+				planes = history[anheader.interleave & 1];
+			}
+			if (planes == nullptr)
 			{
 				fprintf(stderr, "Delta chunk encountered without any history\n");
 				return NULL;
 			}
-			planes = ApplyDelta(history[anheader.interleave & 1], &anheader, chunk->GetLen(), chunk->GetData());
+			planes = ApplyDelta(planes, &anheader, chunk->GetLen(), chunk->GetData());
 			break;
 		}
 		delete chunk;
