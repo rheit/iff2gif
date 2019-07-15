@@ -39,9 +39,11 @@ typedef struct {
 	int16_t		pageWidth, pageHeight; /* source "page" size in pixels		*/
 } BitmapHeader;
 
-typedef struct {
+struct ColorRegister {
 	uint8_t red, green, blue;		/* color intensities 0..255 */
-} ColorRegister;					/* size = 3 bytes			*/
+	ColorRegister() : red(0), green(0), blue(0) {}
+	ColorRegister(int r, int g, int b) : red(r), green(g), blue(b) {}
+};									/* size = 3 bytes			*/
 
 static bool operator== (const ColorRegister &a, const ColorRegister &b) noexcept
 {

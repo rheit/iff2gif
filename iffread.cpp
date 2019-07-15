@@ -641,9 +641,10 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			header.yAspect = bhdr->yAspect;
 			header.pageWidth = BigShort(bhdr->pageWidth);
 			header.pageHeight = BigShort(bhdr->pageHeight);
-			if (header.nPlanes > 8)
+			if (header.nPlanes == 0 ||
+				(header.nPlanes > 8 && header.nPlanes != 24 && header.nPlanes != 32))
 			{
-				fprintf(stderr, "Too many bitplanes (%u)\n", header.nPlanes);
+				fprintf(stderr, "Invalid number of bitplanes (%u)\n", header.nPlanes);
 				return NULL;
 			}
 			planes = new PlanarBitmap(header.w, header.h, header.nPlanes);

@@ -193,8 +193,29 @@ static int numdigits(int num)
 	return ndig;
 }
 
+static std::vector<ColorRegister> *DumbPalette()
+{
+	// The so-called "web-safe" palette with some extra shades of gray
+	static std::vector<ColorRegister> pal;
+
+	if (pal.empty())
+	{
+		// Colors
+		for (int r = 0; r < 6; ++r)
+			for (int g = 0; g < 6; ++g)
+				for (int b = 0; b < 6; ++b)
+					pal.emplace_back(r * 255 / 5, g * 255 / 5, b * 255 / 5);
+		// Grays
+		for (int g = 8; g < 256; g += 8)
+			pal.emplace_back(g, g, g);
+	}
+	return &pal;
+}
+
 void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 {
+	std::vector<ColorRegister> *palette = &bitmap->Palette;
+
 	// Do aspect ratio correction for appropriate ModeIDs.
 	if (AutoAspectScale && FrameCount == 0)
 	{
@@ -207,13 +228,18 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 		}
 	}
 	ChunkyBitmap chunky(*bitmap, ScaleX, ScaleY);
+	if (chunky.BytesPerPixel != 1)
+	{
+		palette = DumbPalette();
+		chunky = chunky.Quantize(&palette->at(0), palette->size());
+	}
 
 	if (FrameCount == 0)
 	{ // Initialize some values from the initial frame.
 		printf("%dx%dx%d\n", bitmap->Width, bitmap->Height, bitmap->NumPlanes);
 		PageWidth = chunky.Width;
 		PageHeight = chunky.Height;
-		GlobalPalBits = ExtendPalette(GlobalPal, bitmap->Palette);
+		GlobalPalBits = ExtendPalette(GlobalPal, *palette);
 		DetectBackgroundColor(bitmap, chunky);
 		if (SFrameLength == 0)
 		{ // Automatically decide what should be an adequate length for the frame number
@@ -237,7 +263,7 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 			{
 				WriteHeader(true);
 			}
-			MakeFrame(bitmap, std::move(chunky));
+			MakeFrame(bitmap, std::move(chunky), *palette, std::min(8, bitmap->NumPlanes));
 		}
 		if (FrameCount == Clips[0].second)
 		{
@@ -334,7 +360,7 @@ int GIFWriter::ExtendPalette(std::vector<ColorRegister> &dest, const std::vector
 	return p;
 }
 
-void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
+void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const std::vector<ColorRegister> &palette, int mincodesize)
 {
 	GIFFrame newframe, *oldframe;
 	bool palchanged;
@@ -371,9 +397,9 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 	// Unlike ANIMs, where a CMAP chunk in one frame applies to that frame and all
 	// subsequent frames until another CMAP, GIF's local color table applies only to
 	// the frame where it appears.
-	if (bitmap->Palette != GlobalPal)
+	if (palette != GlobalPal)
 	{
-		newframe.LocalPalBits = ExtendPalette(newframe.LocalPalette, bitmap->Palette);
+		newframe.LocalPalBits = ExtendPalette(newframe.LocalPalette, palette);
 	}
 	// If the palette has changed from the previous frame, we must redraw the entire frame,
 	// because decoders probably won't repaint the old area with the new palette.
@@ -406,13 +432,13 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 		}
 	}
 	// Compressed the image data
-	LZWCompress(newframe.LZW, newframe.IMD, PrevFrame, chunky, bitmap->NumPlanes, trans);
+	LZWCompress(newframe.LZW, newframe.IMD, PrevFrame, chunky, mincodesize, trans);
 	// If we did transparent substitution, try again without. Sometimes it compresses
 	// better if we don't do that.
 	if (trans >= 0)
 	{
 		std::vector<uint8_t> try2;
-		LZWCompress(try2, newframe.IMD, PrevFrame, chunky, bitmap->NumPlanes, -1);
+		LZWCompress(try2, newframe.IMD, PrevFrame, chunky, mincodesize, -1);
 		size_t l = newframe.LZW.size();
 		size_t r = try2.size();
 		if (try2.size() <= newframe.LZW.size())
@@ -631,7 +657,7 @@ void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const Ch
 CodeStream::CodeStream(uint8_t mincodesize, std::vector<uint8_t> &codes)
 	: Codes(codes)
 {
-	assert(mincodesize >= 2);
+	assert(mincodesize >= 2 && mincodesize <= 8);
 	MinCodeSize = mincodesize;
 	CodeSize = MinCodeSize + 1;
 	ClearCode = 1 << mincodesize;

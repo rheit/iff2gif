@@ -23,7 +23,7 @@
 
 PlanarBitmap::PlanarBitmap(int w, int h, int nPlanes)
 {
-	assert(nPlanes >= 0 && nPlanes < 32);
+	assert(nPlanes > 0 && nPlanes <= 32);
 
 	int i;
 
@@ -44,7 +44,7 @@ PlanarBitmap::PlanarBitmap(int w, int h, int nPlanes)
 	}
 	for (; i < 32; ++i)
 	{
-		Planes[i] = NULL;
+		Planes[i] = nullptr;
 	}
 }
 
@@ -65,9 +65,9 @@ PlanarBitmap::PlanarBitmap(const PlanarBitmap &o)
 	memcpy(PlaneData, o.PlaneData, Pitch * Height * realplanes);
 	for (int i = 0; i < 32; ++i)
 	{
-		if (o.Planes[i] == NULL)
+		if (o.Planes[i] == nullptr)
 		{
-			Planes[i] = NULL;
+			Planes[i] = nullptr;
 		}
 		else
 		{
@@ -79,7 +79,7 @@ PlanarBitmap::PlanarBitmap(const PlanarBitmap &o)
 
 PlanarBitmap::~PlanarBitmap()
 {
-	if (PlaneData != NULL)
+	if (PlaneData != nullptr)
 	{
 		delete[] PlaneData;
 	}
@@ -105,24 +105,6 @@ void PlanarBitmap::ToChunky(void *dest, int destextrawidth) const
 	}
 	else if (NumPlanes <= 8)
 	{
-#if 0
-		uint8_t *out = (uint8_t *)dest;
-		uint32_t in = 0;
-		for (int y = 0; y < Height; ++y)
-		{
-			for (int x = 0; x < Width; ++x)
-			{
-				int bit = 7 - (x & 7), byte = in + (x >> 3);
-				uint8_t pixel = 0;
-				for (int i = NumPlanes - 1; i >= 0; --i)
-				{
-					pixel = (pixel << 1) | ((Planes[i][byte] >> bit) & 1);
-				}
-				*out++ = pixel;
-			}
-			in += Pitch;
-		}
-#else
 		uint8_t *out = (uint8_t *)dest;
 		uint32_t in = 0;
 		const int srcstep = Pitch * Height;
@@ -148,7 +130,6 @@ void PlanarBitmap::ToChunky(void *dest, int destextrawidth) const
 			out += destextrawidth;
 			in += Pitch;
 		}
-#endif
 	}
 	else if (NumPlanes <= 16)
 	{
@@ -172,21 +153,46 @@ void PlanarBitmap::ToChunky(void *dest, int destextrawidth) const
 	}
 	else
 	{
-		uint32_t *out = (uint32_t *)dest;
+		uint8_t *out = (uint8_t *)dest;
 		uint32_t in = 0;
-		for (int y = 0; y < Height; ++y)
+		const int srcstep = Pitch * Height;
+		for (int x, y = 0; y < Height; ++y)
 		{
-			for (int x = 0; x < Width; ++x)
+			// Do 8 pixels at a time
+			for (x = 0; x < Width / 8; ++x, out += 8*4)
 			{
-				int bit = 7 - (x & 7), byte = in + (x >> 3);
+				rotate8x8(PlaneData + in + x, srcstep, out, 4);							// Red
+				rotate8x8(Planes[8] + in + x, srcstep, out + 1, 4);						// Green
+				rotate8x8(Planes[16] + in + x, srcstep, out + 2, 4);					// Blue
+				if (Planes[24])															// Alpha
+				{
+					rotate8x8(Planes[24] + in + x, srcstep, out + 3, 4);
+				}
+				else
+				{ // Set alpha to opaque for images that don't have an alpha channel.
+				  // This is completely ignored by iff2gif at the moment.
+					for (int z = 0; z < 8; ++z)
+						out[3 + z * 4] = 0xFF;
+				}
+			}
+			// Do overflow
+			uint32_t byte = in + x;
+			for (x *= 8; x < Width; ++x)
+			{
+				const int bit = 7 - (x & 7);
 				uint32_t pixel = 0;
 				for (int i = NumPlanes - 1; i >= 0; --i)
 				{
 					pixel = (pixel << 1) | ((Planes[i][byte] >> bit) & 1);
 				}
-				*out++ = pixel;
+				if (NumPlanes < 32) pixel |= 0xFF000000;	// solid alpha if not 32-bit
+				out[0] = pixel & 0xFF;			// Red
+				out[1] = (pixel >> 8) & 0xFF;	// Green
+				out[2] = (pixel >> 16) & 0xFF;	// Blue
+				out[3] = (pixel >> 24) & 0xFF;	// Alpha
+				out += 4;
 			}
-			out += destextrawidth;
+			out += destextrawidth * 4;
 			in += Pitch;
 		}
 	}

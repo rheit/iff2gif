@@ -47,14 +47,16 @@ struct PlanarBitmap
 	void ToChunky(void *dest, int destextrawidth) const;
 };
 
-struct ChunkyBitmap
+class ChunkyBitmap
 {
-	int Width = 0, Height = 0, Pitch = 0;
+public:
+	int Width = 0, Height = 0, Pitch = 0, BytesPerPixel = 0;
 	uint8_t *Pixels = nullptr;
 
 	ChunkyBitmap() {}
 	ChunkyBitmap(const PlanarBitmap &o, int scalex = 1, int scaley = 1);
 	ChunkyBitmap(const ChunkyBitmap &o, int fillcolor);
+	ChunkyBitmap(int w, int h, int bpp = 1);
 	ChunkyBitmap(ChunkyBitmap &&o) noexcept;
 	ChunkyBitmap &ChunkyBitmap::operator=(ChunkyBitmap &&o) noexcept;
 	~ChunkyBitmap();
@@ -66,6 +68,18 @@ struct ChunkyBitmap
 	// Expand an image in the upper left corner of the bitmap to fill the
 	// entire bitmap.
 	void Expand(int scalex, int scaley) noexcept;
+
+	// Reduce higher bit depth image to 8-bits
+	ChunkyBitmap Quantize(const ColorRegister *pal, int numpal);
+
+private:
+	// Helper functions for Expand
+	void Expand1(int scalex, int scaley, int srcwidth, int srcheight, const uint8_t *src, uint8_t *dest) noexcept;
+	void Expand2(int scalex, int scaley, int srcwidth, int srcheight, const uint16_t *src, uint16_t *dest) noexcept;
+	void Expand4(int scalex, int scaley, int srcwidth, int srcheight, const uint32_t *src, uint32_t *dest) noexcept;
+
+	// Allocate the buffer
+	void Alloc(int w, int h, int bpp);
 };
 
 class IFFChunk
@@ -218,7 +232,7 @@ private:
 
 	static int ExtendPalette(std::vector<ColorRegister> &dest, const std::vector<ColorRegister> &src);
 	void WriteHeader(bool loop);
-	void MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky);
+	void MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const std::vector<ColorRegister> &pal, int mincodesize);
 	void MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd);
 	void DetectBackgroundColor(PlanarBitmap *bitmap, const ChunkyBitmap &chunky);
 	uint8_t SelectDisposal(const PlanarBitmap *bitmap, const ImageDescriptor &imd, const ChunkyBitmap &chunky);

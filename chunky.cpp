@@ -20,20 +20,34 @@
 #include "iff2gif.h"
 
 ChunkyBitmap::ChunkyBitmap(const PlanarBitmap &planar, int scalex, int scaley)
-	: Width(planar.Width * scalex), Height(planar.Height * scaley)
 {
-	assert(Width != 0);
-	assert(Height != 0);
 	assert(scalex != 0);
 	assert(scaley != 0);
-	int bytesperpixel = planar.NumPlanes <= 8 ? 1 : planar.NumPlanes <= 16 ? 2 : 4;
-	Pitch = Width * bytesperpixel;
-	Pixels = new uint8_t[Pitch * Height];
+	Alloc(planar.Width * scalex,
+		  planar.Height * scaley,
+		  planar.NumPlanes <= 8 ? 1 : planar.NumPlanes <= 16 ? 2 : 4);
 	planar.ToChunky(Pixels, Width - planar.Width);
 	if (scalex != 1 || scaley != 1)
 	{
 		Expand(scalex, scaley);
 	}
+}
+
+ChunkyBitmap::ChunkyBitmap(int w, int h, int bpp)
+{
+	Alloc(w, h, bpp);
+}
+
+void ChunkyBitmap::Alloc(int w, int h, int bpp)
+{
+	assert(w != 0);
+	assert(h != 0);
+	assert(bpp == 1 || bpp == 2 || bpp == 4);
+	Width = w;
+	Height = h;
+	BytesPerPixel = bpp;
+	Pitch = Width * BytesPerPixel;
+	Pixels = new uint8_t[Pitch * Height];
 }
 
 // Creates a new chunky bitmap with the same dimensions as o, but filled with fillcolor.
@@ -70,6 +84,7 @@ ChunkyBitmap &ChunkyBitmap::operator=(ChunkyBitmap &&o) noexcept
 		Height = o.Height;
 		Pitch = o.Pitch;
 		Pixels = o.Pixels;
+		BytesPerPixel = o.BytesPerPixel;
 		o.Clear(false);
 	}
 	return *this;
@@ -85,13 +100,25 @@ void ChunkyBitmap::Clear(bool release) noexcept
 	Width = 0;
 	Height = 0;
 	Pitch = 0;
+	BytesPerPixel = 0;
 }
 
 void ChunkyBitmap::SetSolidColor(int color) noexcept
 {
 	if (Pixels != nullptr)
 	{
-		memset(Pixels, color, Pitch * Height);
+		if (BytesPerPixel == 1)
+		{
+			memset(Pixels, color, Width * Height);
+		}
+		else if (BytesPerPixel == 2)
+		{
+			std::fill_n((uint16_t *)Pixels, Width * Height, (uint16_t)color);
+		}
+		else
+		{
+			std::fill_n((uint32_t *)Pixels, Width * Height, (uint32_t)color);
+		}
 	}
 }
 
@@ -105,10 +132,21 @@ void ChunkyBitmap::Expand(int scalex, int scaley) noexcept
 	// Work bottom-to-top, right-to-left.
 	int srcwidth = Width / scalex;
 	int srcheight = Height / scaley;
-	const uint8_t *src = Pixels + (srcheight - 1) * Pitch;	// src points to the beginning of the line
-	uint8_t *dest = Pixels + (Height - 1) * Pitch + Width;	// dest points just past the end of the line
 
-	for (int sy = srcheight; sy > 0; --sy, src -= Pitch)
+	const uint8_t *src = Pixels + (srcheight - 1) * Pitch;	// src points to the beginning of the last line
+	uint8_t *dest = Pixels + Height * Pitch;				// dest points just past the end of the last line
+
+	switch (BytesPerPixel)
+	{
+	case 1: Expand1(scalex, scaley, srcwidth, srcheight, src, dest); break;
+	case 2: Expand2(scalex, scaley, srcwidth, srcheight, (const uint16_t *)src, (uint16_t *)dest); break;
+	case 4: Expand4(scalex, scaley, srcwidth, srcheight, (const uint32_t *)src, (uint32_t *)dest); break;
+	}
+}
+
+void ChunkyBitmap::Expand1(int scalex, int scaley, int srcwidth, int srcheight, const uint8_t *src, uint8_t *dest) noexcept
+{
+	for (int sy = srcheight; sy > 0; --sy, src -= Width)
 	{
 		int yy = scaley;
 		const uint8_t *ysrc;
@@ -128,7 +166,100 @@ void ChunkyBitmap::Expand(int scalex, int scaley) noexcept
 		{ // Copy straight from source
 			ysrc = src;
 		}
-		for (; yy > 0; --yy, dest -= Pitch)
-			memcpy(dest - Pitch, ysrc, Pitch);
+		for (; yy > 0; --yy, dest -= Width)
+			memcpy(dest - Width, ysrc, Pitch);
 	}
+}
+
+void ChunkyBitmap::Expand2(int scalex, int scaley, int srcwidth, int srcheight, const uint16_t *src, uint16_t *dest) noexcept
+{
+	for (int sy = srcheight; sy > 0; --sy, src -= Width)
+	{
+		int yy = scaley;
+		const uint16_t *ysrc;
+
+		// If expanding both horizontally and vertically, each source row only needs
+		// to be expanded once because the vertical expansion can copy the already-
+		// expanded line the rest of the way.
+		if (scalex != 1)
+		{ // Expand horizontally
+			for (int sx = srcwidth - 1; sx >= 0; --sx)
+				for (int xx = scalex; xx > 0; --xx)
+					*--dest = src[sx];
+			ysrc = dest;
+			yy--;
+		}
+		else
+		{ // Copy straight from source
+			ysrc = src;
+		}
+		for (; yy > 0; --yy, dest -= Width)
+			memcpy(dest - Width, ysrc, Pitch);
+	}
+}
+
+void ChunkyBitmap::Expand4(int scalex, int scaley, int srcwidth, int srcheight, const uint32_t *src, uint32_t *dest) noexcept
+{
+	for (int sy = srcheight; sy > 0; --sy, src -= Width)
+	{
+		int yy = scaley;
+		const uint32_t *ysrc;
+
+		// If expanding both horizontally and vertically, each source row only needs
+		// to be expanded once because the vertical expansion can copy the already-
+		// expanded line the rest of the way.
+		if (scalex != 1)
+		{ // Expand horizontally
+			for (int sx = srcwidth - 1; sx >= 0; --sx)
+				for (int xx = scalex; xx > 0; --xx)
+					*--dest = src[sx];
+			ysrc = dest;
+			yy--;
+		}
+		else
+		{ // Copy straight from source
+			ysrc = src;
+		}
+		for (; yy > 0; --yy, dest -= Width)
+			memcpy(dest - Width, ysrc, Pitch);
+	}
+}
+
+static int NearestColor(const ColorRegister *pal, int r, int g, int b, int first, int num)
+{
+	int bestcolor = first;
+	int bestdist = 257 * 257 + 257 * 257 + 257 * 257;
+
+	for (int color = first; color < num; color++)
+	{
+		int x = r - pal[color].red;
+		int y = g - pal[color].green;
+		int z = b - pal[color].blue;
+		int dist = x * x + y * y + z * z;
+		if (dist < bestdist)
+		{
+			if (dist == 0)
+				return color;
+
+			bestdist = dist;
+			bestcolor = color;
+		}
+	}
+	return bestcolor;
+}
+
+ChunkyBitmap ChunkyBitmap::Quantize(const ColorRegister *pal, int npal)
+{
+	assert(BytesPerPixel == 4);
+	ChunkyBitmap out(Width, Height);
+	const uint8_t *src = Pixels;
+	uint8_t *dest = out.Pixels;
+
+	// Not optimal, but I just want something output for the moment.
+	for (int i = 0; i < Width * Height; ++i)
+	{
+		*dest++ = NearestColor(pal, src[0], src[1], src[2], 0, npal);
+		src += 4;
+	}
+	return out;
 }
