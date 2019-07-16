@@ -774,16 +774,15 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 		{
 			MakeEHBPalette(palette);
 		}
-		else if (modeid & HAM)
-		{
-			fprintf(stderr, "Note: HAM mode is not supported\n");
-		}
 		// Only overwrite the palette if we loaded a new one.
 		if (!palette.empty())
 		{
 			planes->Palette = palette;
 		}
-		planes->ModeID = modeid;
+		if (modeid != 0)
+		{
+			planes->ModeID = modeid;
+		}
 		if (speed > 0)
 		{
 			planes->Rate = speed;

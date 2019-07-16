@@ -215,6 +215,7 @@ static std::vector<ColorRegister> *DumbPalette()
 void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 {
 	std::vector<ColorRegister> *palette = &bitmap->Palette;
+	int mincodesize = bitmap->NumPlanes;
 
 	// Do aspect ratio correction for appropriate ModeIDs.
 	if (AutoAspectScale && FrameCount == 0)
@@ -228,10 +229,26 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 		}
 	}
 	ChunkyBitmap chunky(*bitmap, ScaleX, ScaleY);
+	if (bitmap->ModeID & HAM)
+	{
+		if (bitmap->NumPlanes < 7)
+		{
+			if (palette->size() < 16)
+				palette->resize(16);
+			chunky = chunky.HAM6toRGB(*palette);
+		}
+		else
+		{
+			if (palette->size() < 64)
+				palette->resize(64);
+			chunky = chunky.HAM8toRGB(*palette);
+		}
+	}
 	if (chunky.BytesPerPixel != 1)
 	{
 		palette = DumbPalette();
 		chunky = chunky.Quantize(&palette->at(0), palette->size());
+		mincodesize = 8;
 	}
 
 	if (FrameCount == 0)
@@ -263,7 +280,7 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 			{
 				WriteHeader(true);
 			}
-			MakeFrame(bitmap, std::move(chunky), *palette, std::min(8, bitmap->NumPlanes));
+			MakeFrame(bitmap, std::move(chunky), *palette, mincodesize);
 		}
 		if (FrameCount == Clips[0].second)
 		{

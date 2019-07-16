@@ -72,6 +72,10 @@ public:
 	// Reduce higher bit depth image to 8-bits
 	ChunkyBitmap Quantize(const ColorRegister *pal, int numpal);
 
+	// Convert HAM to RGB
+	ChunkyBitmap HAM6toRGB(std::vector<ColorRegister> &pal);
+	ChunkyBitmap HAM8toRGB(std::vector<ColorRegister> &pal);
+
 private:
 	// Helper functions for Expand
 	void Expand1(int scalex, int scaley, int srcwidth, int srcheight, const uint8_t *src, uint8_t *dest) noexcept;

@@ -59,6 +59,7 @@ PlanarBitmap::PlanarBitmap(const PlanarBitmap &o)
 	Interleave = o.Interleave;
 	Delay = o.Delay;
 	Rate = o.Rate;
+	ModeID = o.ModeID;
 
 	int realplanes = std::max(NumPlanes, 8);
 	PlaneData = new uint8_t[Pitch * Height * realplanes];

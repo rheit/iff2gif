@@ -52,7 +52,8 @@ void ChunkyBitmap::Alloc(int w, int h, int bpp)
 
 // Creates a new chunky bitmap with the same dimensions as o, but filled with fillcolor.
 ChunkyBitmap::ChunkyBitmap(const ChunkyBitmap &o, int fillcolor)
-	: Width(o.Width), Height(o.Height), Pitch(o.Pitch)
+	: Width(o.Width), Height(o.Height), Pitch(o.Pitch),
+	  BytesPerPixel(o.BytesPerPixel)
 {
 	Pixels = new uint8_t[Pitch * Height];
 	SetSolidColor(fillcolor);
@@ -67,7 +68,8 @@ ChunkyBitmap::~ChunkyBitmap()
 }
 
 ChunkyBitmap::ChunkyBitmap(ChunkyBitmap &&o) noexcept
-	: Width(o.Width), Height(o.Height), Pitch(o.Pitch), Pixels(o.Pixels)
+	: Width(o.Width), Height(o.Height), Pitch(o.Pitch),
+	  BytesPerPixel(o.BytesPerPixel), Pixels(o.Pixels)
 {
 	o.Clear(false);
 }
@@ -225,6 +227,64 @@ void ChunkyBitmap::Expand4(int scalex, int scaley, int srcwidth, int srcheight, 
 	}
 }
 
+// Convert OCS HAM6 to RGB
+ChunkyBitmap ChunkyBitmap::HAM6toRGB(std::vector<ColorRegister> &pal)
+{
+	assert(pal.size() >= 16);
+	assert(BytesPerPixel == 1);
+	ChunkyBitmap out(Width, Height, 4);
+	const uint8_t *src = Pixels;
+	uint8_t *dest = out.Pixels;
+	ColorRegister color = pal[0];
+
+	for (int i = Width * Height; i > 0; --i, ++src, dest += 4)
+	{
+		uint8_t intensity = *src & 0x0F;
+		intensity |= intensity << 4;
+		switch (*src & 0xF0)
+		{
+		case 0x00: color = pal[*src]; break;
+		case 0x10: color.blue = intensity; break;
+		case 0x20: color.red = intensity; break;
+		case 0x30: color.green = intensity; break;
+		}
+		dest[0] = color.red;
+		dest[1] = color.green;
+		dest[2] = color.blue;
+		dest[3] = 0xFF;
+	}
+	return out;
+}
+
+// Convert AGA HAM8 to RGB
+ChunkyBitmap ChunkyBitmap::HAM8toRGB(std::vector<ColorRegister> &pal)
+{
+	assert(pal.size() >= 64);
+	assert(BytesPerPixel == 1);
+	ChunkyBitmap out(Width, Height, 4);
+	const uint8_t *src = Pixels;
+	uint8_t *dest = out.Pixels;
+	ColorRegister color = pal[0];
+
+	for (int i = Width * Height; i > 0; --i, ++src, dest += 4)
+	{
+		uint8_t intensity = *src & 0x3F;
+		intensity = (intensity << 2) | (intensity >> 4);
+		switch (*src & 0xC0)
+		{
+		case 0x00: color = pal[*src]; break;
+		case 0x40: color.blue = intensity; break;
+		case 0x80: color.red = intensity; break;
+		case 0xC0: color.green = intensity; break;
+		}
+		dest[0] = color.red;
+		dest[1] = color.green;
+		dest[2] = color.blue;
+		dest[3] = 0xFF;
+	}
+	return out;
+}
+
 static int NearestColor(const ColorRegister *pal, int r, int g, int b, int first, int num)
 {
 	int bestcolor = first;
@@ -256,7 +316,7 @@ ChunkyBitmap ChunkyBitmap::Quantize(const ColorRegister *pal, int npal)
 	uint8_t *dest = out.Pixels;
 
 	// Not optimal, but I just want something output for the moment.
-	for (int i = 0; i < Width * Height; ++i)
+	for (int i = Width * Height; i > 0; --i)
 	{
 		*dest++ = NearestColor(pal, src[0], src[1], src[2], 0, npal);
 		src += 4;
