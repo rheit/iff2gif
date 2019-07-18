@@ -231,13 +231,13 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 	ChunkyBitmap chunky(*bitmap, ScaleX, ScaleY);
 	if (bitmap->ModeID & HAM)
 	{
-		if (bitmap->NumPlanes < 7)
+		if (bitmap->NumPlanes <= 6)
 		{
 			if (palette->size() < 16)
 				palette->resize(16);
 			chunky = chunky.HAM6toRGB(*palette);
 		}
-		else
+		else if (bitmap->NumPlanes <= 8)
 		{
 			if (palette->size() < 64)
 				palette->resize(64);
