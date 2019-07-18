@@ -288,14 +288,16 @@ ChunkyBitmap ChunkyBitmap::HAM8toRGB(std::vector<ColorRegister> &pal)
 static int NearestColor(const ColorRegister *pal, int r, int g, int b, int first, int num)
 {
 	int bestcolor = first;
-	int bestdist = 257 * 257 + 257 * 257 + 257 * 257;
+	int bestdist = INT_MAX;
 
 	for (int color = first; color < num; color++)
 	{
+		int rmean = (r + pal[color].red) / 2;
 		int x = r - pal[color].red;
 		int y = g - pal[color].green;
 		int z = b - pal[color].blue;
-		int dist = x * x + y * y + z * z;
+		//int dist = x * x + y * y + z * z;
+		int dist = (512 + rmean) * x * x + 1024 * y * y + (767 - rmean) * z * z;
 		if (dist < bestdist)
 		{
 			if (dist == 0)
