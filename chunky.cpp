@@ -17,6 +17,8 @@
 */
 
 #include <assert.h>
+#include <array>
+#include <algorithm>
 #include "iff2gif.h"
 
 ChunkyBitmap::ChunkyBitmap(const PlanarBitmap &planar, int scalex, int scaley)
@@ -317,11 +319,40 @@ ChunkyBitmap ChunkyBitmap::Quantize(const ColorRegister *pal, int npal)
 	const uint8_t *src = Pixels;
 	uint8_t *dest = out.Pixels;
 
+#if 0
 	// Not optimal, but I just want something output for the moment.
 	for (int i = Width * Height; i > 0; --i)
 	{
 		*dest++ = NearestColor(pal, src[0], src[1], src[2], 0, npal);
 		src += 4;
 	}
+#else
+	// Floyd Steinberg
+	std::vector<std::array<int, 3>> error[2];
+	error[0].resize(Width);
+	error[1].resize(Width);
+
+	for (int y = Height; y > 0; --y)
+	{
+		for (int x = 0; x < Width; ++x, src += 4)
+		{
+			int r = src[0] + error[0][x][0] / 16;
+			int g = src[1] + error[0][x][1] / 16;
+			int b = src[2] + error[0][x][2] / 16;
+			int c = NearestColor(pal, r, g, b, 0, npal);
+			*dest++ = c;
+			// Diffuse the difference between what we wanted and what we got.
+			r -= pal[c].red;
+			g -= pal[c].green;
+			b -= pal[c].blue;
+			if (x < Width - 1) error[0][x + 1][0] += r * 7, error[0][x + 1][1] += g * 7, error[0][x + 1][2] += b * 7;
+			if (x > 0) error[1][x - 1][0] += r * 3, error[1][x - 1][1] += g * 3, error[1][x - 1][2] += b * 3;
+			error[1][x][0] += r * 5, error[1][x][1] += g * 5, error[1][x][2] += b * 5;
+			if (x < Width - 1) error[1][x + 1][0] += r, error[1][x + 1][1] += g, error[1][x + 1][2] += b;
+		}
+		error[0].swap(error[1]);
+		std::fill(error[1].begin(), error[1].end(), std::array<int, 3>());
+	}
+#endif
 	return out;
 }
