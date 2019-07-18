@@ -78,9 +78,10 @@ void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const Ch
 	const ChunkyBitmap &chunky, uint8_t mincodesize, int trans);
 
 GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate, int scalex, int scaley,
-	bool aspectscale, std::vector<std::pair<unsigned, unsigned>> &clips)
+	bool aspectscale, std::vector<std::pair<unsigned, unsigned>> &clips, int diffusion)
 	: BaseFilename(filename), SoloMode(solo), ScaleX(scalex), ScaleY(scaley),
-	  AutoAspectScale(aspectscale), ForcedFrameRate(forcedrate > 0), Clips(clips)
+	  AutoAspectScale(aspectscale), ForcedFrameRate(forcedrate > 0),
+	  DiffusionMode(diffusion), Clips(clips)
 {
 	assert(ScaleX >= 1);
 	assert(ScaleY >= 1);
@@ -247,7 +248,7 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 	if (chunky.BytesPerPixel != 1)
 	{
 		palette = DumbPalette();
-		chunky = chunky.Quantize(&palette->at(0), palette->size());
+		chunky = chunky.RGBtoPalette(*palette, DiffusionMode);
 		mincodesize = 8;
 	}
 

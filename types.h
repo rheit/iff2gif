@@ -60,6 +60,11 @@ extern "C" {
 #include <string>
 typedef std::basic_string<_TCHAR> tstring;
 
+template <typename T, std::size_t N>
+constexpr std::size_t countof(T const (&)[N]) noexcept
+{
+	return N;
+}
 #ifdef __APPLE__
 #include <libkern/OSByteOrder.h>
 

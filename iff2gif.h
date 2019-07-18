@@ -70,17 +70,31 @@ public:
 	void Expand(int scalex, int scaley) noexcept;
 
 	// Reduce higher bit depth image to 8-bits
-	ChunkyBitmap Quantize(const ColorRegister *pal, int numpal);
+	ChunkyBitmap RGBtoPalette(const std::vector<ColorRegister> &pal, int dithermode) const;
 
 	// Convert HAM to RGB
-	ChunkyBitmap HAM6toRGB(std::vector<ColorRegister> &pal);
-	ChunkyBitmap HAM8toRGB(std::vector<ColorRegister> &pal);
+	ChunkyBitmap HAM6toRGB(const std::vector<ColorRegister> &pal) const;
+	ChunkyBitmap HAM8toRGB(const std::vector<ColorRegister> &pal) const;
+
+	// Describes an error diffusion kernel. An array of these, terminated with a
+	// weight of 0, describes one kernel. Since a single weighting is often applied
+	// to multiple pixels, this struct stores each weight once with a list of
+	// pixels to add that weighted value to.
+	struct Diffuser
+	{
+		uint16_t weight;		// .16 fixed point
+		struct { int8_t x, y; } to[6];
+	};
 
 private:
 	// Helper functions for Expand
 	void Expand1(int scalex, int scaley, int srcwidth, int srcheight, const uint8_t *src, uint8_t *dest) noexcept;
 	void Expand2(int scalex, int scaley, int srcwidth, int srcheight, const uint16_t *src, uint16_t *dest) noexcept;
 	void Expand4(int scalex, int scaley, int srcwidth, int srcheight, const uint32_t *src, uint32_t *dest) noexcept;
+
+	// Helper functions for RGBtoPalette
+	void RGB2P_BasicQuantize(ChunkyBitmap &out, const std::vector<ColorRegister> &pal) const;
+	void RGB2P_ErrorDiffusion(ChunkyBitmap &out, const std::vector<ColorRegister> &pal, const Diffuser *kernel) const;
 
 	// Allocate the buffer
 	void Alloc(int w, int h, int bpp);
@@ -204,7 +218,7 @@ class GIFWriter
 {
 public:
 	GIFWriter(tstring filename, bool solo, int forcedrate, int scalex, int scaley,
-		bool aspectscale, std::vector<std::pair<unsigned, unsigned>> &clips);
+		bool aspectscale, std::vector<std::pair<unsigned, unsigned>> &clips, int diffusionmode);
 	~GIFWriter();
 
 	void AddFrame(PlanarBitmap *bitmap);
@@ -226,6 +240,7 @@ private:
 	int ScaleX = 1, ScaleY = 1;
 	bool AutoAspectScale;
 	bool ForcedFrameRate;
+	int DiffusionMode = 0;
 	std::vector<std::pair<unsigned, unsigned>> Clips;
 
 	bool SoloMode = false;
