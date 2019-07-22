@@ -39,17 +39,6 @@ typedef struct {
 	int16_t		pageWidth, pageHeight; /* source "page" size in pixels		*/
 } BitmapHeader;
 
-struct ColorRegister {
-	uint8_t red, green, blue;		/* color intensities 0..255 */
-	ColorRegister() : red(0), green(0), blue(0) {}
-	ColorRegister(int r, int g, int b) : red(r), green(g), blue(b) {}
-};									/* size = 3 bytes			*/
-
-static bool operator== (const ColorRegister &a, const ColorRegister &b) noexcept
-{
-	return a.red == b.red && a.green == b.green && a.blue == b.blue;
-}
-
 typedef struct {
 	uint8_t depth;		/* # bitplanes in the original source				*/
 	uint8_t pad1;		/* unused; for consistency put 0 here				*/

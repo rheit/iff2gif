@@ -23,6 +23,18 @@
 #include "types.h"
 #include "iff.h"
 
+struct ColorRegister {				/* size = 3 bytes			*/
+	uint8_t red, green, blue;		/* color intensities 0..255 */
+	ColorRegister(const ColorRegister &o) : red(o.red), green(o.green), blue(o.blue) {}
+	ColorRegister() : red(0), green(0), blue(0) {}
+	ColorRegister(int r, int g, int b) : red(r), green(g), blue(b) {}
+
+	bool operator==(const ColorRegister &b) const noexcept
+	{
+		return red == b.red && green == b.green && blue == b.blue;
+	}
+};
+
 struct PlanarBitmap
 {
 	int Width = 0, Height = 0, Pitch = 0;
@@ -76,6 +88,9 @@ public:
 	// Convert HAM to RGB
 	ChunkyBitmap HAM6toRGB(const std::vector<ColorRegister> &pal) const;
 	ChunkyBitmap HAM8toRGB(const std::vector<ColorRegister> &pal) const;
+
+	// Pick a palette for an RGB image
+	std::vector<ColorRegister> ModifiedMedianCut(int maxcolors) const;
 
 	// Describes an error diffusion kernel. An array of these, terminated with a
 	// weight of 0, describes one kernel. Since a single weighting is often applied

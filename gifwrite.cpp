@@ -199,10 +199,10 @@ static int numdigits(int num)
 	return ndig;
 }
 
-static std::vector<ColorRegister> *DumbPalette()
+static std::vector<ColorRegister> DumbPalette()
 {
 	// The so-called "web-safe" palette with some extra shades of gray
-	static std::vector<ColorRegister> pal;
+	std::vector<ColorRegister> pal;
 
 	if (pal.empty())
 	{
@@ -215,12 +215,12 @@ static std::vector<ColorRegister> *DumbPalette()
 		for (int g = 8; g < 256; g += 8)
 			pal.emplace_back(g, g, g);
 	}
-	return &pal;
+	return pal;
 }
 
 void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 {
-	std::vector<ColorRegister> *palette = &bitmap->Palette;
+	std::vector<ColorRegister> palette = bitmap->Palette;
 	int mincodesize = bitmap->NumPlanes;
 
 	// Do aspect ratio correction for appropriate ModeIDs.
@@ -239,21 +239,22 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 	{
 		if (bitmap->NumPlanes <= 6)
 		{
-			if (palette->size() < 16)
-				palette->resize(16);
-			chunky = chunky.HAM6toRGB(*palette);
+			if (palette.size() < 16)
+				palette.resize(16);
+			chunky = chunky.HAM6toRGB(palette);
 		}
 		else if (bitmap->NumPlanes <= 8)
 		{
-			if (palette->size() < 64)
-				palette->resize(64);
-			chunky = chunky.HAM8toRGB(*palette);
+			if (palette.size() < 64)
+				palette.resize(64);
+			chunky = chunky.HAM8toRGB(palette);
 		}
 	}
 	if (chunky.BytesPerPixel != 1)
 	{
-		palette = DumbPalette();
-		chunky = chunky.RGBtoPalette(*palette, DiffusionMode);
+		//palette = DumbPalette();
+		palette = chunky.ModifiedMedianCut(256);
+		chunky = chunky.RGBtoPalette(palette, DiffusionMode);
 		mincodesize = 8;
 	}
 
@@ -262,7 +263,7 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 		printf("%dx%dx%d\n", bitmap->Width, bitmap->Height, bitmap->NumPlanes);
 		PageWidth = chunky.Width;
 		PageHeight = chunky.Height;
-		GlobalPalBits = ExtendPalette(GlobalPal, *palette);
+		GlobalPalBits = ExtendPalette(GlobalPal, palette);
 		DetectBackgroundColor(bitmap, chunky);
 		if (SFrameLength == 0)
 		{ // Automatically decide what should be an adequate length for the frame number
@@ -286,7 +287,7 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 			{
 				WriteHeader(true);
 			}
-			MakeFrame(bitmap, std::move(chunky), *palette, mincodesize);
+			MakeFrame(bitmap, std::move(chunky), palette, mincodesize);
 		}
 		if (FrameCount == Clips[0].second)
 		{

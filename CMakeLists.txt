@@ -11,6 +11,7 @@ set(SOURCES
     planar.cpp
     ppunpack.cpp
     rotate.cpp
+    mediancut.cpp
 )
 
 if(WIN32)
