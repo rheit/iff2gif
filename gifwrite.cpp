@@ -253,7 +253,7 @@ void GIFWriter::AddFrame(PlanarBitmap *bitmap)
 	if (chunky.BytesPerPixel != 1)
 	{
 		//palette = DumbPalette();
-		palette = chunky.ModifiedMedianCut(256);
+		palette = chunky.NeuQuant/*ModifiedMedianCut*/(256);
 		chunky = chunky.RGBtoPalette(palette, DiffusionMode);
 		mincodesize = 8;
 	}

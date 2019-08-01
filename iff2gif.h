@@ -91,6 +91,7 @@ public:
 
 	// Pick a palette for an RGB image
 	std::vector<ColorRegister> ModifiedMedianCut(int maxcolors) const;
+	std::vector<ColorRegister> NeuQuant(int maxcolors) const;
 
 	// Describes an error diffusion kernel. An array of these, terminated with a
 	// weight of 0, describes one kernel. Since a single weighting is often applied

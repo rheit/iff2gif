@@ -12,6 +12,7 @@ set(SOURCES
     ppunpack.cpp
     rotate.cpp
     mediancut.cpp
+    neuquant.cpp
 )
 
 if(WIN32)
