@@ -24,16 +24,16 @@
 
 static constexpr int ncycles = 100;			// no. of learning cycles
 
-static constexpr int netsize = 256;		// number of colours used
-static constexpr int specials = 3;		// number of reserved colours used
+static constexpr int maxnetsize = 256;		// number of colours used
+static constexpr int specials = 3;			// number of reserved colours used
 static constexpr int bgColour = specials - 1;	// reserved background colour
-static constexpr int cutnetsize = netsize - specials;
-static constexpr int maxnetpos = netsize - 1;
+#define cutnetsize (netsize - specials)
+#define maxnetpos (netsize - 1)
 
-static constexpr int initrad = netsize / 8;   // for 256 cols, radius starts at 32
+#define initrad (netsize / 8)			   // for 256 cols, radius starts at 32
 static constexpr int radiusbiasshift = 6;
 static constexpr int radiusbias = 1 << radiusbiasshift;
-static constexpr int initBiasRadius = initrad * radiusbias;
+#define initBiasRadius (initrad * radiusbias)
 static constexpr int radiusdec = 30; // factor of 1/30 each cycle
 
 static constexpr int alphabiasshift = 10;			// alpha starts at 1
@@ -46,14 +46,14 @@ static constexpr double betagamma = beta * gamma;
 
 class NeuQuant
 {
-	private: double network[netsize][3]; // the network itself
-	protected: int colormap[netsize][4]; // the network itself
+	private: double network[maxnetsize][3]; // the network itself
+	protected: int colormap[maxnetsize][4]; // the network itself
 
 private:
 	int netindex[256]; // for network lookup - really 256
 
-	double bias[netsize];  // bias and freq arrays for learning
-	double freq[netsize];
+	double bias[maxnetsize];  // bias and freq arrays for learning
+	double freq[maxnetsize];
 
 	// four primes near 500 - assume no image has a length so large
 	// that it is divisible by all four primes
@@ -65,17 +65,22 @@ public:
 	static constexpr int prime4 = 503;
 	static constexpr int maxprime = prime4;
 
-protected: const ChunkyBitmap &pixels;
-private: int samplefac = 0;
+protected:
+	const ChunkyBitmap &pixels;
+
+private:
+	int samplefac = 0;
+	int netsize = maxnetsize;
 
 public:
-	NeuQuant(const ChunkyBitmap &im)
-	: NeuQuant(1, im) {
+	NeuQuant(const ChunkyBitmap &im, int maxcolors=maxnetsize)
+	: NeuQuant(1, im, maxcolors) {
 	}
 
-	NeuQuant(int sample, const ChunkyBitmap &im)
-	: pixels(im), samplefac(sample) {
+	NeuQuant(int sample, const ChunkyBitmap &im, int maxcolors)
+	: pixels(im), samplefac(sample), netsize(maxcolors) {
 		if (sample < 1 || sample > 30) throw std::out_of_range("Sample must be 1..30");
+		if (netsize < specials + 1 || netsize > maxnetsize) throw std::out_of_range("Netsize must be 4..256");
 		if (im.Width * im.Height < maxprime) throw std::domain_error("Image is too small");
 		assert(im.BytesPerPixel == 4);
 		setUpArrays();
@@ -373,7 +378,7 @@ protected:
 std::vector<ColorRegister> ChunkyBitmap::NeuQuant(int maxcolors) const
 {
 	assert(BytesPerPixel == 4);
-	::NeuQuant nq(*this);
+	::NeuQuant nq(*this, maxcolors);
 	nq.init();
 	return nq.getPalette();
 }
