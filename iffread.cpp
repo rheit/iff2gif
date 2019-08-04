@@ -793,7 +793,39 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 	return NULL;
 }
 
-static void LoadANIM(FORMReader &form, GIFWriter &writer)
+static void AddFrame(GIFWriter &writer, PlanarBitmap *bitmap, int scalex, int scaley, bool aspectscale)
+{
+	// Do aspect ratio correction for appropriate ModeIDs.
+	if (aspectscale)
+	{
+		switch (bitmap->ModeID & (LACE | HIRES | SUPERHIRES))
+		{
+		case LACE:				scalex *= 2; break;
+		case HIRES:				scaley *= 2; break;
+		case SUPERHIRES:		scaley *= 4; break;
+		case SUPERHIRES | LACE:	scaley *= 2; break;
+		}
+	}
+	ChunkyBitmap chunky(*bitmap, scalex, scaley);
+	if (bitmap->ModeID & HAM)
+	{
+		if (bitmap->NumPlanes <= 6)
+		{
+			if (bitmap->Palette.size() < 16)
+				bitmap->Palette.resize(16);
+			chunky = chunky.HAM6toRGB(bitmap->Palette);
+		}
+		else if (bitmap->NumPlanes <= 8)
+		{
+			if (bitmap->Palette.size() < 64)
+				bitmap->Palette.resize(64);
+			chunky = chunky.HAM8toRGB(bitmap->Palette);
+		}
+	}
+	writer.AddFrame(bitmap, std::move(chunky));
+}
+
+static void LoadANIM(FORMReader &form, GIFWriter &writer, int scalex, int scaley, bool aspectscale)
 {
 	FORMReader *chunk;
 	PlanarBitmap *history[2] = { NULL, NULL };
@@ -805,7 +837,7 @@ static void LoadANIM(FORMReader &form, GIFWriter &writer)
 			PlanarBitmap *planar;
 			while (NULL != (planar = LoadILBM(*chunk, history)))
 			{
-				writer.AddFrame(planar);
+				AddFrame(writer, planar, scalex, scaley, aspectscale);
 				if (history[0] == NULL)
 				{ // This was the first frame. Duplicate it for double buffering.
 					history[0] = planar;
@@ -864,7 +896,7 @@ struct membuf : std::streambuf
 };
 
 
-void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer)
+void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, int scalex, int scaley, bool aspectscale)
 {
 	uint32_t id = 0;
 
@@ -879,7 +911,7 @@ void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer)
 
 			membuf sbuf((char *)unpacked.get(), (char *)unpacked.get() + unpackedsize);
 			std::istream unppfile(&sbuf);
-			LoadFile(filename, unppfile, writer);
+			LoadFile(filename, unppfile, writer, scalex, scaley, aspectscale);
 			return;
 		}
 		if (id != ID_FORM)
@@ -894,13 +926,13 @@ void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer)
 			PlanarBitmap *planar = LoadILBM(iff, NULL);
 			if (planar != NULL)
 			{
-				writer.AddFrame(planar);
+				AddFrame(writer, planar, scalex, scaley, aspectscale);
 				delete planar;
 			}
 		}
 		else if (id == ID_ANIM)
 		{
-			LoadANIM(iff, writer);
+			LoadANIM(iff, writer, scalex, scaley, aspectscale);
 		}
 		else
 		{

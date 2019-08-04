@@ -82,14 +82,11 @@ private:
 void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const ChunkyBitmap &cbprev,
 	const ChunkyBitmap &chunky, uint8_t mincodesize, int trans);
 
-GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate, int scalex, int scaley,
-	bool aspectscale, std::vector<std::pair<unsigned, unsigned>> &clips, int diffusion)
-	: BaseFilename(filename), SoloMode(solo), ScaleX(scalex), ScaleY(scaley),
-	  AutoAspectScale(aspectscale), ForcedFrameRate(forcedrate > 0),
+GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate,
+	std::vector<std::pair<unsigned, unsigned>> &clips, int diffusion)
+	: BaseFilename(filename), SoloMode(solo), ForcedFrameRate(forcedrate > 0),
 	  DiffusionMode(diffusion), Clips(clips)
 {
-	assert(ScaleX >= 1);
-	assert(ScaleY >= 1);
 	if (forcedrate > 0)
 	{
 		FrameRate = forcedrate;
@@ -218,38 +215,13 @@ static std::vector<ColorRegister> DumbPalette()
 	return pal;
 }
 
-void GIFWriter::AddFrame(PlanarBitmap *bitmap)
+// bitmap is used for basic metadata about the image, but the actual
+// image data comes from chunky.
+void GIFWriter::AddFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 {
 	std::vector<ColorRegister> palette = bitmap->Palette;
 	int mincodesize = bitmap->NumPlanes;
 
-	// Do aspect ratio correction for appropriate ModeIDs.
-	if (AutoAspectScale && FrameCount == 0)
-	{
-		switch (bitmap->ModeID & (LACE | HIRES | SUPERHIRES))
-		{
-		case LACE:				ScaleX *= 2; break;
-		case HIRES:				ScaleY *= 2; break;
-		case SUPERHIRES:		ScaleY *= 4; break;
-		case SUPERHIRES | LACE:	ScaleY *= 2; break;
-		}
-	}
-	ChunkyBitmap chunky(*bitmap, ScaleX, ScaleY);
-	if (bitmap->ModeID & HAM)
-	{
-		if (bitmap->NumPlanes <= 6)
-		{
-			if (palette.size() < 16)
-				palette.resize(16);
-			chunky = chunky.HAM6toRGB(palette);
-		}
-		else if (bitmap->NumPlanes <= 8)
-		{
-			if (palette.size() < 64)
-				palette.resize(64);
-			chunky = chunky.HAM8toRGB(palette);
-		}
-	}
 	if (chunky.BytesPerPixel != 1)
 	{
 		//palette = DumbPalette();
@@ -384,7 +356,7 @@ int GIFWriter::ExtendPalette(std::vector<ColorRegister> &dest, const std::vector
 	return p;
 }
 
-void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const std::vector<ColorRegister> &palette, int mincodesize)
+void GIFWriter::MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const std::vector<ColorRegister> &palette, int mincodesize)
 {
 	GIFFrame newframe, *oldframe;
 	bool palchanged;
@@ -487,7 +459,7 @@ void GIFWriter::MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const std
 	PrevFrame = std::move(chunky);
 }
 
-void GIFWriter::DetectBackgroundColor(PlanarBitmap *bitmap, const ChunkyBitmap &chunky)
+void GIFWriter::DetectBackgroundColor(const PlanarBitmap *bitmap, const ChunkyBitmap &chunky)
 {
 	// The GIF specification includes a background color. CompuServe probably actually
 	// used this. In practice, modern viewers just make the background be transparent

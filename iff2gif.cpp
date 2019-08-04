@@ -190,8 +190,8 @@ int _tmain(int argc, _TCHAR* argv[])
 		// Append the .gif extension to the input name.
 		outstring += _T(".gif");
 	}
-	GIFWriter writer(outstring, solomode, forcedrate, scalex, scaley, aspectscale, clips, diffusionmode);
-	LoadFile(argv[1], infile, writer);
+	GIFWriter writer(outstring, solomode, forcedrate, clips, diffusionmode);
+	LoadFile(argv[1], infile, writer, scalex, scaley, aspectscale);
 	return 0;
 }
 

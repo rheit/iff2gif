@@ -234,11 +234,11 @@ private:
 class GIFWriter
 {
 public:
-	GIFWriter(tstring filename, bool solo, int forcedrate, int scalex, int scaley,
-		bool aspectscale, std::vector<std::pair<unsigned, unsigned>> &clips, int diffusionmode);
+	GIFWriter(tstring filename, bool solo, int forcedrate,
+		std::vector<std::pair<unsigned, unsigned>> &clips, int diffusionmode);
 	~GIFWriter();
 
-	void AddFrame(PlanarBitmap *bitmap);
+	void AddFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky);
 
 private:
 	FILE *File = nullptr;
@@ -254,8 +254,6 @@ private:
 	uint16_t PageWidth = 0, PageHeight = 0;
 	std::vector<ColorRegister> GlobalPal;
 	uint8_t GlobalPalBits = 0;
-	int ScaleX = 1, ScaleY = 1;
-	bool AutoAspectScale;
 	bool ForcedFrameRate;
 	int DiffusionMode = 0;
 	std::vector<std::pair<unsigned, unsigned>> Clips;
@@ -268,9 +266,9 @@ private:
 
 	static int ExtendPalette(std::vector<ColorRegister> &dest, const std::vector<ColorRegister> &src);
 	void WriteHeader(bool loop);
-	void MakeFrame(PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const std::vector<ColorRegister> &pal, int mincodesize);
+	void MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const std::vector<ColorRegister> &pal, int mincodesize);
 	void MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd);
-	void DetectBackgroundColor(PlanarBitmap *bitmap, const ChunkyBitmap &chunky);
+	void DetectBackgroundColor(const PlanarBitmap *bitmap, const ChunkyBitmap &chunky);
 	uint8_t SelectDisposal(const PlanarBitmap *bitmap, const ImageDescriptor &imd, const ChunkyBitmap &chunky);
 	int SelectTransparentColor(const ChunkyBitmap &prev, const ChunkyBitmap &now, const ImageDescriptor &imd);
 	bool FinishFile();	// Finish writing the file. Returns true on success.
@@ -281,6 +279,6 @@ private:
 
 #define ID_PP20 MAKE_ID('P','P','2','0')
 
-void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer);
+void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, int scalex, int scaley, bool aspectscale);
 std::unique_ptr<uint8_t[]> LoadPowerPackerFile(std::istream &file, size_t filesize, unsigned &unpackedsize);
 void rotate8x8(unsigned char *src, int srcstep, unsigned char *dst, int dststep);
