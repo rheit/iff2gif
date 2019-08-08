@@ -113,12 +113,60 @@ struct MCSplitComparator
 	}
 };
 
-static std::vector<HistEntry> BuildHistogram(const ChunkyBitmap &bitmap, uint8_t mins[3], uint8_t maxs[3]);
-static std::vector<ColorRegister> PaletteFromHistogram(const std::vector<HistEntry> &histo);
-static std::vector<ColorRegister> PaletteFromMCBins(const std::vector<HistEntry> &histo, const std::vector<MCBin> &bins);
-
-static void CheckBounds(int binnum, const std::vector<HistEntry> &histo, const MCBin &bin)
+class MedianCut : public Quantizer
 {
+public:
+	MedianCut(int maxcolors);
+	void AddPixels(const uint8_t *rgb, size_t count) override;
+	std::vector<ColorRegister> GetPalette() override;
+
+private:
+	void AddToHistogram(const uint8_t *src, size_t numpixels, uint8_t mins[3], uint8_t maxs[3]);
+	std::vector<ColorRegister> PaletteFromHistogram(const std::vector<HistEntry> &histo);
+	std::vector<ColorRegister> PaletteFromMCBins(const std::vector<HistEntry> &histo, const std::vector<MCBin> &bins);
+	std::vector<ColorRegister> CalcPalette();
+
+	void CheckBounds(int binnum, const MCBin &bin) const;
+
+	std::vector<MCBin> Bins;
+	std::vector<HistEntry> Histogram;
+	std::unordered_map<uint32_t, size_t> ColorToHisto;	// Color to histogram index
+	int MaxColors;
+};
+
+MedianCut::MedianCut(int maxcolors)
+	: Bins(1), MaxColors(maxcolors)
+{
+	// If dithering, the starting bin should be the entire color space.
+	// If not dithering, it could be constrained to just the bounding box
+	// around the colors actually used by swapping the 255 and 0 in this
+	// initialization and letting AddToHistogram resize the box.
+	for (unsigned i = 0; i < 3; ++i)
+	{
+		Bins[0].Mins[i] = 0;
+		Bins[0].Maxs[i] = 255;
+	}
+}
+
+void MedianCut::AddPixels(const uint8_t *rgb, size_t count)
+{
+	AddToHistogram(rgb, count, Bins[0].Mins, Bins[0].Maxs);
+	Bins[0].Count += (uint32_t)count;
+}
+
+std::vector<ColorRegister> MedianCut::GetPalette()
+{
+	if (Histogram.size() <= MaxColors)
+	{ // The image doesn't contain any more colors than we want,
+	  // so there's no need to spend time cutting it.
+		return PaletteFromHistogram(Histogram);
+	}
+	return CalcPalette();
+}
+
+void MedianCut::CheckBounds(int binnum, const MCBin &bin) const
+{
+#ifdef _DEBUG
 	int lo[3] = { INT_MAX, INT_MAX, INT_MAX };
 	int hi[3] = { INT_MIN, INT_MIN, INT_MIN };
 
@@ -129,8 +177,8 @@ static void CheckBounds(int binnum, const std::vector<HistEntry> &histo, const M
 		{
 			for (int j = 0; j < 3; ++j)
 			{
-				if (histo[i].Component[j] < lo[j]) lo[j] = histo[i].Component[j];
-				if (histo[i].Component[j] > hi[j]) hi[j] = histo[i].Component[j];
+				if (Histogram[i].Component[j] < lo[j]) lo[j] = Histogram[i].Component[j];
+				if (Histogram[i].Component[j] > hi[j]) hi[j] = Histogram[i].Component[j];
 			}
 		}
 		for (int i = 0; i < 3; ++i)
@@ -142,120 +190,96 @@ static void CheckBounds(int binnum, const std::vector<HistEntry> &histo, const M
 			printf("(%d [%3d - %3d]            ) ", i, bin.Mins[i], bin.Maxs[i]);
 	}
 	printf("\n");
-
+#endif
 }
 
-std::vector<ColorRegister> ChunkyBitmap::ModifiedMedianCut(int maxcolors) const
+std::vector<ColorRegister> MedianCut::CalcPalette()
 {
 	unsigned i;
-	std::vector<MCBin> bins(1);
-	for (i = 0; i < 3; ++i)
-	{
-		bins[0].Mins[i] = 0;
-		bins[0].Maxs[i] = 255;
-	}
-	std::vector<HistEntry> histo = BuildHistogram(*this, /*bins[0].Mins, bins[0].Maxs*/nullptr, nullptr);
-	if (histo.size() <= maxcolors)
-	{ // The image doesn't contain any more colors than we want.
-		return PaletteFromHistogram(histo);
-	}
-	MCQueueComparator comparator(bins);
+	MCQueueComparator comparator(Bins);
 	std::priority_queue<uint32_t, std::vector<uint32_t>, MCQueueComparator> queue(comparator);
-	int reprioat = maxcolors * 3 / 4;
 
-	bins[0].Count = Width * Height;
-	bins[0].Begin = 0;
-	bins[0].End = (uint32_t)histo.size();
-	bins[0].SortDim = -1;
+	// After dividing into reprio_at bins, further bins splits will
+	// consider volume as well as population count.
+	int reprio_at = (int)(MaxColors * 0.75);
+
+	Bins[0].Begin = 0;
+	Bins[0].End = (uint32_t)Histogram.size();
+	Bins[0].SortDim = -1;
 	queue.push(0);
 
-	while (bins.size() < maxcolors && !queue.empty())
+	while (Bins.size() < MaxColors && !queue.empty())
 	{
 		uint32_t binnum = queue.top();
 		queue.pop();
-		MCBin &bin{ bins[binnum] };
+		MCBin &bin{ Bins[binnum] };
 		int splitdim = bin.LongestDim();
 
 		// Split halfway between the median and the side furthest from it.
-		bin.Sort(histo, splitdim);
+		bin.Sort(Histogram, splitdim);
 		// Locate the median based on population count. This is not exactly halfway
 		// between begin and end, because each histogram entry can represent more
 		// than one pixel.
 		int mediancount = 0, medianstop = bin.Count / 2;
 		for (i = bin.Begin; mediancount < medianstop && i < bin.End; ++i)
 		{
-			mediancount += histo[i].Count;
+			mediancount += Histogram[i].Count;
 		}
-		int median = histo[i - 1].Component[splitdim] + 1;
+		int median = Histogram[i - 1].Component[splitdim] + 1;
 		int splitpt = median - bin.Mins[splitdim] > bin.Maxs[splitdim] - median
 			? (median + bin.Mins[splitdim]) / 2
 			: (median + bin.Maxs[splitdim]) / 2;
 		if (splitpt == bin.Mins[splitdim])
 			splitpt++;
 		printf("Split bin %d (pop %u) @ %d on dim %d\n", binnum, bin.Count, splitpt, splitdim);
-		uint32_t newbin = (uint32_t)bins.size();
-		bins.emplace_back(bin.Split(histo, splitdim, splitpt));
-		CheckBounds(binnum, histo, bins[binnum]);
-		CheckBounds(newbin, histo, bins[newbin]);
+		uint32_t newbin = (uint32_t)Bins.size();
+		Bins.emplace_back(bin.Split(Histogram, splitdim, splitpt));
+		CheckBounds(binnum, Bins[binnum]);
+		CheckBounds(newbin, Bins[newbin]);
 
-		if (bins.size() != reprioat)
+		if (Bins.size() != reprio_at)
 		{ // Requeue this bin and the one split off from it, but only if they can be further split.
-			if (bins[binnum].CanSplit()) queue.push(binnum);
-			if (bins[newbin].CanSplit()) queue.push(newbin);
+			if (Bins[binnum].CanSplit()) queue.push(binnum);
+			if (Bins[newbin].CanSplit()) queue.push(newbin);
 		}
 		else
 		{ // Requeue everything, now taking volume into account as well as population.
 			comparator.PopOnly = false;
 			std::priority_queue<uint32_t, std::vector<uint32_t>, MCQueueComparator> emptyq(comparator);
 			queue = emptyq;
-			for (uint32_t i = 0; i < bins.size(); ++i)
-				if (bins[i].CanSplit())
+			for (uint32_t i = 0; i < Bins.size(); ++i)
+				if (Bins[i].CanSplit())
 					queue.push(i);
 		}
 	}
-	return PaletteFromMCBins(histo, bins);
+	return PaletteFromMCBins(Histogram, Bins);
 }
 
 // Count all the unique colors in an image and optionally computes the 3D bounding box for those colors.
-static std::vector<HistEntry> BuildHistogram(const ChunkyBitmap &bitmap, uint8_t mins[3], uint8_t maxs[3])
+void MedianCut::AddToHistogram(const uint8_t *src, size_t numpixels, uint8_t mins[3], uint8_t maxs[3])
 {
-	std::vector<HistEntry> histogram;
-	std::unordered_map<uint32_t, size_t> colortohisto;	// Color to histogram index
-	unsigned i, j;
-
-	assert(bitmap.BytesPerPixel == 4);
-	if (mins && maxs)
-	{
-		for (i = 0; i < 3; ++i)
-		{
-			mins[i] = 255;
-			maxs[i] = 0;
-		}
-	}
-	const uint8_t *src = bitmap.Pixels;
-	for (j = bitmap.Width * bitmap.Height; j > 0; --j, src += 4)
+	for (size_t j = numpixels; j > 0; --j, src += 4)
 	{
 		uint32_t color = *reinterpret_cast<const uint32_t *>(src);
-		auto it = colortohisto.find(color);
-		if (it != colortohisto.end())
+		auto it = ColorToHisto.find(color);
+		if (it != ColorToHisto.end())
 		{
-			histogram[it->second].Count++;
+			Histogram[it->second].Count++;
 		}
 		else
 		{
-			colortohisto[color] = histogram.size();
-			histogram.emplace_back(src[0], src[1], src[2]);
+			ColorToHisto[color] = Histogram.size();
+			Histogram.emplace_back(src[0], src[1], src[2]);
 		}
 		if (mins && maxs)
 		{
-			for (i = 0; i < 3; ++i)
+			for (int i = 0; i < 3; ++i)
 			{
 				if (src[i] < mins[i]) mins[i] = src[i];
 				if (src[i] > maxs[i]) maxs[i] = src[i];
 			}
 		}
 	}
-	return histogram;
 }
 
 int MCBin::Dim(int i) const
@@ -371,7 +395,7 @@ MCBin MCBin::Split(const std::vector<HistEntry> &histo, int splitdim, int splitp
 	return newbin;
 }
 
-static std::vector<ColorRegister> PaletteFromHistogram(const std::vector<HistEntry> &histo)
+std::vector<ColorRegister> MedianCut::PaletteFromHistogram(const std::vector<HistEntry> &histo)
 {
 	std::vector<ColorRegister> pal(histo.size());
 	for (size_t i = 0; i < histo.size(); ++i)
@@ -381,7 +405,7 @@ static std::vector<ColorRegister> PaletteFromHistogram(const std::vector<HistEnt
 	return pal;
 }
 
-static std::vector<ColorRegister> PaletteFromMCBins(const std::vector<HistEntry> &histo, const std::vector<MCBin> &bins)
+std::vector<ColorRegister> MedianCut::PaletteFromMCBins(const std::vector<HistEntry> &histo, const std::vector<MCBin> &bins)
 {
 	std::vector<ColorRegister> pal(bins.size());
 	for (size_t i = 0; i < pal.size(); ++i)
@@ -406,4 +430,9 @@ static std::vector<ColorRegister> PaletteFromMCBins(const std::vector<HistEntry>
 		}
 	}
 	return pal;
+}
+
+Quantizer *NewMedianCut(int maxcolors)
+{
+	return new MedianCut(maxcolors);
 }

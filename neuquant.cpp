@@ -44,7 +44,7 @@ static constexpr double beta = 1.0 / 1024.0;
 static constexpr double betagamma = beta * gamma;
 
 
-class NeuQuant
+class NeuQuant : public Quantizer
 {
 	private: double network[maxnetsize][3]; // the network itself
 	protected: int colormap[maxnetsize][4]; // the network itself
@@ -65,24 +65,19 @@ public:
 	static constexpr int prime4 = 503;
 	static constexpr int maxprime = prime4;
 
-protected:
-	const ChunkyBitmap &pixels;
-
 private:
 	int samplefac = 0;
 	int netsize = maxnetsize;
 
 public:
-	NeuQuant(const ChunkyBitmap &im, int maxcolors=maxnetsize)
-	: NeuQuant(1, im, maxcolors) {
+	NeuQuant(int maxcolors=maxnetsize)
+	: NeuQuant(1, maxcolors) {
 	}
 
-	NeuQuant(int sample, const ChunkyBitmap &im, int maxcolors)
-	: pixels(im), samplefac(sample), netsize(maxcolors) {
+	NeuQuant(int sample, int maxcolors)
+	: samplefac(sample), netsize(maxcolors) {
 		if (sample < 1 || sample > 30) throw std::out_of_range("Sample must be 1..30");
 		if (netsize < specials + 1 || netsize > maxnetsize) throw std::out_of_range("Netsize must be 4..256");
-		if (im.Width * im.Height < maxprime) throw std::domain_error("Image is too small");
-		assert(im.BytesPerPixel == 4);
 		setUpArrays();
 	}
 
@@ -96,15 +91,6 @@ public:
 		int gg = colormap[i][1];
 		int rr = colormap[i][2];
 		return { rr, gg, bb };
-	}
-
-	std::vector<ColorRegister> getPalette() const {
-		std::vector<ColorRegister> pal(netsize);
-		for (int i = 0; i < netsize; ++i)
-		{
-			pal[i] = ColorRegister(colormap[i][2], colormap[i][1], colormap[i][0]);
-		}
-		return pal;
 	}
 
 	void setUpArrays() {
@@ -133,13 +119,13 @@ public:
 			bias[i] = 0.0;
 		}
 	}
-
+/*
 	void init() {
 		learn();
 		fix();
 		inxbuild();
 	}
-
+*/
 private:
 	void altersingle(double alpha, int i, double b, double g, double r) {
 		// Move neuron i towards biased (b,g,r) by factor alpha
@@ -209,22 +195,21 @@ private:
 		return -1;
 	}
 
-	void learn() {
+	void learn(const uint8_t *pixels, size_t lengthcount) {
 		int biasRadius = initBiasRadius;
 		int alphadec = 30 + ((samplefac - 1) / 3);
-		int lengthcount = pixels.Width * pixels.Height;
-		int samplepixels = lengthcount / samplefac;
-		int delta = samplepixels / ncycles;
+		size_t samplepixels = lengthcount / samplefac;
+		size_t delta = samplepixels / ncycles;
 		int alpha = initalpha;
 
 		int i = 0;
 		int rad = biasRadius >> radiusbiasshift;
 		if (rad <= 1) rad = 0;
 
-		fprintf(stderr, "beginning 1D learning: samplepixels=%d  rad=%d\n", samplepixels, rad);
+		fprintf(stderr, "beginning 1D learning: samplepixels=%zd  rad=%d\n", samplepixels, rad);
 
 		int step = 0;
-		int pos = 0;
+		size_t pos = 0;
 
 		if ((lengthcount % prime1) != 0) step = prime1;
 		else {
@@ -237,7 +222,7 @@ private:
 
 		i = 0;
 		while (i < samplepixels) {
-			const uint8_t *p = &pixels.Pixels[pos * 4];
+			const uint8_t *p = &pixels[pos * 4];
 			double b = p[2];
 			double g = p[1];
 			double r = p[0];
@@ -373,12 +358,25 @@ protected:
 		return best;
 	}
 
+public:
+	void AddPixels(const uint8_t *rgb, size_t count) override
+	{
+		learn(rgb, count);
+		fix();
+		inxbuild();
+	}
+
+	std::vector<ColorRegister> GetPalette() override {
+		std::vector<ColorRegister> pal(netsize);
+		for (int i = 0; i < netsize; ++i)
+		{
+			pal[i] = ColorRegister(colormap[i][2], colormap[i][1], colormap[i][0]);
+		}
+		return pal;
+	}
 };
 
-std::vector<ColorRegister> ChunkyBitmap::NeuQuant(int maxcolors) const
+Quantizer *NewNeuQuant(int maxcolors)
 {
-	assert(BytesPerPixel == 4);
-	::NeuQuant nq(*this, maxcolors);
-	nq.init();
-	return nq.getPalette();
+	return new NeuQuant(maxcolors);
 }

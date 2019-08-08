@@ -89,10 +89,6 @@ public:
 	ChunkyBitmap HAM6toRGB(const std::vector<ColorRegister> &pal) const;
 	ChunkyBitmap HAM8toRGB(const std::vector<ColorRegister> &pal) const;
 
-	// Pick a palette for an RGB image
-	std::vector<ColorRegister> ModifiedMedianCut(int maxcolors) const;
-	std::vector<ColorRegister> NeuQuant(int maxcolors) const;
-
 	// Describes an error diffusion kernel. An array of these, terminated with a
 	// weight of 0, describes one kernel. Since a single weighting is often applied
 	// to multiple pixels, this struct stores each weight once with a list of
@@ -200,6 +196,25 @@ struct GIFFrame
 	std::vector<ColorRegister> LocalPalette;
 	std::vector<uint8_t> LZW;
 };
+
+class Quantizer
+{
+public:
+	virtual ~Quantizer();
+	virtual void AddPixels(const ChunkyBitmap &bitmap);
+	virtual void AddPixels(const uint8_t *rgb, size_t count) = 0;
+	virtual std::vector<ColorRegister> GetPalette() = 0;
+};
+
+enum
+{
+	QUANTIZER_MedianCut,
+	QUANTIZER_NeuQuant,
+
+	NUM_QUANTIZERS
+};
+
+extern Quantizer *(*const QuantizerFactory[NUM_QUANTIZERS])(int);
 
 // GIF frames are not written directly after processing, because ANIMs
 // may or may not duplicate the initial frames at the end of the animation,

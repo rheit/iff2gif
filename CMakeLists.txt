@@ -13,6 +13,7 @@ set(SOURCES
     rotate.cpp
     mediancut.cpp
     neuquant.cpp
+    quantizer.cpp
 )
 
 if(WIN32)
