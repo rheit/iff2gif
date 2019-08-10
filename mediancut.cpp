@@ -19,34 +19,11 @@
 #include <assert.h>
 #include <algorithm>
 #include <vector>
-#include <unordered_map>
 #include "iff2gif.h"
 
 // This file implements the Modified Median Cut Quantization algorithm
 // as described in "Color quantization using modified median cut" by
 // Dan S. Bloomberg.
-
-struct HistEntry
-{
-	uint8_t Component[3];	// Red, Green, and Blue
-	uint32_t Count;			// Number of pixels that have this color
-
-	HistEntry(uint8_t c1, uint8_t c2, uint8_t c3)
-	{
-		Component[0] = c1;
-		Component[1] = c2;
-		Component[2] = c3;
-		Count = 1;
-	}
-	HistEntry &operator=(const HistEntry &o)
-	{
-		Component[0] = o.Component[0];
-		Component[1] = o.Component[1];
-		Component[2] = o.Component[2];
-		Count = o.Count;
-		return *this;
-	}
-};
 
 struct MCBin
 {
@@ -64,11 +41,11 @@ struct MCBin
 	int LongestDim() const;
 
 	// Sorts the histogram entries for this bin along dimension dim
-	void Sort(std::vector<HistEntry> &histo, int dim);
+	void Sort(Histogram &histo, int dim);
 
 	// Splits this bin along dimension splitdim at position splitpt.
 	// Returns a new bin split off from this one.
-	MCBin Split(const std::vector<HistEntry> &histo, int splitdim, int splitpt);
+	MCBin Split(const Histogram &histo, int splitdim, int splitpt);
 
 	// Returns true if this bin can be split further.
 	bool CanSplit() const;
@@ -107,7 +84,7 @@ struct MCSplitComparator
 	int Dim;
 
 	MCSplitComparator(int dim) : Dim(dim) {}
-	bool operator()(const HistEntry &a, int pt)
+	bool operator()(const Histogram::HistEntry &a, int pt)
 	{
 		return a.Component[Dim] < pt;
 	}
@@ -121,16 +98,13 @@ public:
 	std::vector<ColorRegister> GetPalette() override;
 
 private:
-	void AddToHistogram(const uint8_t *src, size_t numpixels, uint8_t mins[3], uint8_t maxs[3]);
-	std::vector<ColorRegister> PaletteFromHistogram(const std::vector<HistEntry> &histo);
-	std::vector<ColorRegister> PaletteFromMCBins(const std::vector<HistEntry> &histo, const std::vector<MCBin> &bins);
+	std::vector<ColorRegister> PaletteFromMCBins(const Histogram &histo, const std::vector<MCBin> &bins);
 	std::vector<ColorRegister> CalcPalette();
 
 	void CheckBounds(int binnum, const MCBin &bin) const;
 
 	std::vector<MCBin> Bins;
-	std::vector<HistEntry> Histogram;
-	std::unordered_map<uint32_t, size_t> ColorToHisto;	// Color to histogram index
+	Histogram Histo;
 	int MaxColors;
 };
 
@@ -150,16 +124,16 @@ MedianCut::MedianCut(int maxcolors)
 
 void MedianCut::AddPixels(const uint8_t *rgb, size_t count)
 {
-	AddToHistogram(rgb, count, Bins[0].Mins, Bins[0].Maxs);
+	Histo.AddPixels(rgb, count, Bins[0].Mins, Bins[0].Maxs);
 	Bins[0].Count += (uint32_t)count;
 }
 
 std::vector<ColorRegister> MedianCut::GetPalette()
 {
-	if (Histogram.size() <= MaxColors)
+	if (Histo.size() <= MaxColors)
 	{ // The image doesn't contain any more colors than we want,
 	  // so there's no need to spend time cutting it.
-		return PaletteFromHistogram(Histogram);
+		return Histo.ToPalette();
 	}
 	return CalcPalette();
 }
@@ -177,8 +151,8 @@ void MedianCut::CheckBounds(int binnum, const MCBin &bin) const
 		{
 			for (int j = 0; j < 3; ++j)
 			{
-				if (Histogram[i].Component[j] < lo[j]) lo[j] = Histogram[i].Component[j];
-				if (Histogram[i].Component[j] > hi[j]) hi[j] = Histogram[i].Component[j];
+				if (Histo[i].Component[j] < lo[j]) lo[j] = Histo[i].Component[j];
+				if (Histo[i].Component[j] > hi[j]) hi[j] = Histo[i].Component[j];
 			}
 		}
 		for (int i = 0; i < 3; ++i)
@@ -204,7 +178,7 @@ std::vector<ColorRegister> MedianCut::CalcPalette()
 	int reprio_at = (int)(MaxColors * 0.75);
 
 	Bins[0].Begin = 0;
-	Bins[0].End = (uint32_t)Histogram.size();
+	Bins[0].End = (uint32_t)Histo.size();
 	Bins[0].SortDim = -1;
 	queue.push(0);
 
@@ -216,16 +190,16 @@ std::vector<ColorRegister> MedianCut::CalcPalette()
 		int splitdim = bin.LongestDim();
 
 		// Split halfway between the median and the side furthest from it.
-		bin.Sort(Histogram, splitdim);
+		bin.Sort(Histo, splitdim);
 		// Locate the median based on population count. This is not exactly halfway
 		// between begin and end, because each histogram entry can represent more
 		// than one pixel.
 		int mediancount = 0, medianstop = bin.Count / 2;
 		for (i = bin.Begin; mediancount < medianstop && i < bin.End; ++i)
 		{
-			mediancount += Histogram[i].Count;
+			mediancount += Histo[i].Count;
 		}
-		int median = Histogram[i - 1].Component[splitdim] + 1;
+		int median = Histo[i - 1].Component[splitdim] + 1;
 		int splitpt = median - bin.Mins[splitdim] > bin.Maxs[splitdim] - median
 			? (median + bin.Mins[splitdim]) / 2
 			: (median + bin.Maxs[splitdim]) / 2;
@@ -233,7 +207,7 @@ std::vector<ColorRegister> MedianCut::CalcPalette()
 			splitpt++;
 		printf("Split bin %d (pop %u) @ %d on dim %d\n", binnum, bin.Count, splitpt, splitdim);
 		uint32_t newbin = (uint32_t)Bins.size();
-		Bins.emplace_back(bin.Split(Histogram, splitdim, splitpt));
+		Bins.emplace_back(bin.Split(Histo, splitdim, splitpt));
 		CheckBounds(binnum, Bins[binnum]);
 		CheckBounds(newbin, Bins[newbin]);
 
@@ -252,34 +226,7 @@ std::vector<ColorRegister> MedianCut::CalcPalette()
 					queue.push(i);
 		}
 	}
-	return PaletteFromMCBins(Histogram, Bins);
-}
-
-// Count all the unique colors in an image and optionally computes the 3D bounding box for those colors.
-void MedianCut::AddToHistogram(const uint8_t *src, size_t numpixels, uint8_t mins[3], uint8_t maxs[3])
-{
-	for (size_t j = numpixels; j > 0; --j, src += 4)
-	{
-		uint32_t color = *reinterpret_cast<const uint32_t *>(src);
-		auto it = ColorToHisto.find(color);
-		if (it != ColorToHisto.end())
-		{
-			Histogram[it->second].Count++;
-		}
-		else
-		{
-			ColorToHisto[color] = Histogram.size();
-			Histogram.emplace_back(src[0], src[1], src[2]);
-		}
-		if (mins && maxs)
-		{
-			for (int i = 0; i < 3; ++i)
-			{
-				if (src[i] < mins[i]) mins[i] = src[i];
-				if (src[i] > maxs[i]) maxs[i] = src[i];
-			}
-		}
-	}
+	return PaletteFromMCBins(Histo, Bins);
 }
 
 int MCBin::Dim(int i) const
@@ -315,12 +262,12 @@ bool MCBin::CanSplit() const
 	return i < 3;
 }
 
-void MCBin::Sort(std::vector<HistEntry> &histo, int dim)
+void MCBin::Sort(Histogram &histo, int dim)
 {
 	if (SortDim != dim)
 	{
 		std::sort(&histo[Begin], &histo[End - 1] + 1,
-			[dim](const HistEntry &a, const HistEntry &b)
+			[dim](const Histogram::HistEntry &a, const Histogram::HistEntry &b)
 			{ return a.Component[dim] < b.Component[dim]; });
 		SortDim = dim;
 	}
@@ -328,7 +275,7 @@ void MCBin::Sort(std::vector<HistEntry> &histo, int dim)
 	assert(Maxs[dim] >= histo[End - 1].Component[dim]);
 }
 
-MCBin MCBin::Split(const std::vector<HistEntry> &histo, int splitdim, int splitpt)
+MCBin MCBin::Split(const Histogram &histo, int splitdim, int splitpt)
 {
 	assert(Mins[splitdim] < splitpt && splitpt <= Maxs[splitdim]);
 
@@ -395,17 +342,7 @@ MCBin MCBin::Split(const std::vector<HistEntry> &histo, int splitdim, int splitp
 	return newbin;
 }
 
-std::vector<ColorRegister> MedianCut::PaletteFromHistogram(const std::vector<HistEntry> &histo)
-{
-	std::vector<ColorRegister> pal(histo.size());
-	for (size_t i = 0; i < histo.size(); ++i)
-	{
-		pal[i] = ColorRegister(histo[i].Component[0], histo[i].Component[1], histo[i].Component[2]);
-	}
-	return pal;
-}
-
-std::vector<ColorRegister> MedianCut::PaletteFromMCBins(const std::vector<HistEntry> &histo, const std::vector<MCBin> &bins)
+std::vector<ColorRegister> MedianCut::PaletteFromMCBins(const Histogram &histo, const std::vector<MCBin> &bins)
 {
 	std::vector<ColorRegister> pal(bins.size());
 	for (size_t i = 0; i < pal.size(); ++i)

@@ -20,15 +20,27 @@
 #include <queue>
 #include <iostream>
 #include <memory>
+#include <unordered_map>
 #include "types.h"
 #include "iff.h"
 
 struct ColorRegister {				/* size = 3 bytes			*/
 	uint8_t red, green, blue;		/* color intensities 0..255 */
 	ColorRegister(const ColorRegister &o) : red(o.red), green(o.green), blue(o.blue) {}
+	ColorRegister(ColorRegister &&o) noexcept : red(o.red), green(o.green), blue(o.blue) {}
 	ColorRegister() : red(0), green(0), blue(0) {}
 	ColorRegister(int r, int g, int b) : red(r), green(g), blue(b) {}
 
+	ColorRegister &operator=(ColorRegister &&b) noexcept
+	{
+		red = b.red, green = b.green, blue = b.blue;
+		return *this;
+	}
+	ColorRegister &operator=(const ColorRegister &b) noexcept
+	{
+		red = b.red, green = b.green, blue = b.blue;
+		return *this;
+	}
 	bool operator==(const ColorRegister &b) const noexcept
 	{
 		return red == b.red && green == b.green && blue == b.blue;
@@ -195,6 +207,46 @@ struct GIFFrame
 	uint8_t LocalPalBits = 0;
 	std::vector<ColorRegister> LocalPalette;
 	std::vector<uint8_t> LZW;
+};
+
+class Histogram
+{
+public:
+	struct HistEntry
+	{
+		uint8_t Component[3];	// Red, Green, and Blue
+		uint32_t Count;			// Number of pixels that have this color
+
+		HistEntry(uint8_t c1, uint8_t c2, uint8_t c3)
+		{
+			Component[0] = c1;
+			Component[1] = c2;
+			Component[2] = c3;
+			Count = 1;
+		}
+		HistEntry &operator=(const HistEntry &o)
+		{
+			Component[0] = o.Component[0];
+			Component[1] = o.Component[1];
+			Component[2] = o.Component[2];
+			Count = o.Count;
+			return *this;
+		}
+		explicit operator ColorRegister() const
+		{
+			return ColorRegister(Component[0], Component[1], Component[2]);
+		}
+	};
+	HistEntry &operator[](size_t n) { return Histo[n]; }
+	const HistEntry &operator[](size_t n) const { return Histo[n]; }
+	size_t size() const { return Histo.size(); }
+
+	void AddPixels(const uint8_t *src, size_t numpixels, uint8_t mins[3], uint8_t maxs[3]);
+	std::vector<ColorRegister> ToPalette() const;
+
+private:
+	std::vector<HistEntry> Histo;	// Histogram entries
+	std::unordered_map<uint32_t, size_t> ColorToHisto;	// Color to histogram index
 };
 
 class Quantizer

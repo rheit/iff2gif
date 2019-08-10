@@ -17,7 +17,6 @@
 */
 
 #include <algorithm>
-#include <unordered_map>
 #include <assert.h>
 #include <stdio.h>
 
@@ -225,7 +224,7 @@ void GIFWriter::AddFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 	if (chunky.BytesPerPixel != 1)
 	{
 		//palette = DumbPalette();
-		std::unique_ptr<Quantizer> quant{ QuantizerFactory[QUANTIZER_NeuQuant](256) };
+		std::unique_ptr<Quantizer> quant{ QuantizerFactory[QUANTIZER_MedianCut](256) };
 		quant->AddPixels(chunky);
 		palette = quant->GetPalette();
 		chunky = chunky.RGBtoPalette(palette, DiffusionMode);
