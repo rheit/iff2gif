@@ -20,6 +20,8 @@
  */
 
 #include <assert.h>
+#include <numeric>
+#include <random>
 #include "iff2gif.h"
 
 static constexpr int ncycles = 100;			// no. of learning cycles
@@ -43,6 +45,41 @@ static constexpr double gamma = 1024.0;
 static constexpr double beta = 1.0 / 1024.0;
 static constexpr double betagamma = beta * gamma;
 
+// Given a histogram, create a random array of pixels where the number
+// of times a color appears is proportional to its count in the histogram.
+std::vector<ColorRegister> SampleHistogram(const Histogram &histo, int samplefac)
+{
+	std::vector<ColorRegister> samples;
+	int divisor;
+
+	// Find the greatest common divisor for all the color counts.
+	// Save some work by not processing any more colors than we need to.
+	if (histo.size() == 1)
+	{
+		divisor = 1;
+	}
+	else
+	{
+		divisor = std::gcd(histo[0].Count, histo[1].Count);
+		for (int i = 2; i < histo.size(); ++i)
+		{
+			divisor = std::gcd(divisor, histo[i].Count);
+		}
+	}
+	divisor *= samplefac;
+	for (size_t i = 0; i < histo.size(); ++i)
+	{
+		// Make sure every color gets a chance at representation, even
+		// even for ones that are used fewer than <divisor> times.
+		size_t cnt = std::max(1u, histo[i].Count / divisor);
+		size_t j = samples.size();
+		samples.resize(j + cnt);
+		std::fill(samples.begin() + j, samples.begin() + j + cnt, ColorRegister(histo[i]));
+	}
+	std::shuffle(samples.begin(), samples.end(), std::mt19937());
+	return samples;
+}
+
 
 class NeuQuant : public Quantizer
 {
@@ -55,17 +92,8 @@ private:
 	double bias[maxnetsize];  // bias and freq arrays for learning
 	double freq[maxnetsize];
 
-	// four primes near 500 - assume no image has a length so large
-	// that it is divisible by all four primes
-
-public:
-	static constexpr int prime1 = 499;
-	static constexpr int prime2 = 491;
-	static constexpr int prime3 = 487;
-	static constexpr int prime4 = 503;
-	static constexpr int maxprime = prime4;
-
 private:
+	Histogram histo;
 	int samplefac = 0;
 	int netsize = maxnetsize;
 
@@ -119,13 +147,13 @@ public:
 			bias[i] = 0.0;
 		}
 	}
-/*
+
 	void init() {
 		learn();
 		fix();
 		inxbuild();
 	}
-*/
+
 private:
 	void altersingle(double alpha, int i, double b, double g, double r) {
 		// Move neuron i towards biased (b,g,r) by factor alpha
@@ -195,10 +223,11 @@ private:
 		return -1;
 	}
 
-	void learn(const uint8_t *pixels, size_t lengthcount) {
+	void learn() {
 		int biasRadius = initBiasRadius;
 		int alphadec = 30 + ((samplefac - 1) / 3);
-		size_t samplepixels = lengthcount / samplefac;
+		std::vector<ColorRegister> samples = SampleHistogram(histo, samplefac);
+		size_t samplepixels = samples.size();
 		size_t delta = samplepixels / ncycles;
 		int alpha = initalpha;
 
@@ -208,24 +237,10 @@ private:
 
 		fprintf(stderr, "beginning 1D learning: samplepixels=%zd  rad=%d\n", samplepixels, rad);
 
-		int step = 0;
-		size_t pos = 0;
-
-		if ((lengthcount % prime1) != 0) step = prime1;
-		else {
-			if ((lengthcount % prime2) != 0) step = prime2;
-			else {
-				if ((lengthcount % prime3) != 0) step = prime3;
-				else step = prime4;
-			}
-		}
-
-		i = 0;
-		while (i < samplepixels) {
-			const uint8_t *p = &pixels[pos * 4];
-			double b = p[2];
-			double g = p[1];
-			double r = p[0];
+		for (ColorRegister &p : samples) {
+			double b = p.blue;
+			double g = p.green;
+			double r = p.red;
 
 			if (i == 0) {   // remember background colour
 				network[bgColour][0] = b;
@@ -241,9 +256,6 @@ private:
 				altersingle(a, j, b, g, r);
 				if (rad > 0) alterneigh(a, rad, j, b, g, r);   // alter neighbours
 			}
-
-			pos += step;
-			while (pos >= lengthcount) pos -= lengthcount;
 
 			i++;
 			if (i % delta == 0) {
@@ -361,18 +373,28 @@ protected:
 public:
 	void AddPixels(const uint8_t *rgb, size_t count) override
 	{
-		learn(rgb, count);
-		fix();
-		inxbuild();
+		histo.AddPixels(rgb, count, nullptr, nullptr);
 	}
 
 	std::vector<ColorRegister> GetPalette() override {
-		std::vector<ColorRegister> pal(netsize);
-		for (int i = 0; i < netsize; ++i)
+		if (histo.empty())
 		{
-			pal[i] = ColorRegister(colormap[i][2], colormap[i][1], colormap[i][0]);
+			return {};
 		}
-		return pal;
+		else if (histo.size() <= netsize)
+		{ // No need for NeuQuant if there aren't too many colors.
+			return histo.ToPalette();
+		}
+		else
+		{
+			init();
+			std::vector<ColorRegister> pal(netsize);
+			for (int i = 0; i < netsize; ++i)
+			{
+				pal[i] = ColorRegister(colormap[i][2], colormap[i][1], colormap[i][0]);
+			}
+			return pal;
+		}
 	}
 };
 

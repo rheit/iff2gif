@@ -240,6 +240,7 @@ public:
 	HistEntry &operator[](size_t n) { return Histo[n]; }
 	const HistEntry &operator[](size_t n) const { return Histo[n]; }
 	size_t size() const { return Histo.size(); }
+	bool empty() const { return Histo.empty(); }
 
 	void AddPixels(const uint8_t *src, size_t numpixels, uint8_t mins[3], uint8_t maxs[3]);
 	std::vector<ColorRegister> ToPalette() const;
