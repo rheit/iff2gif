@@ -236,7 +236,7 @@ void ChunkyBitmap::Expand4(int scalex, int scaley, int srcwidth, int srcheight, 
 }
 
 // Convert OCS HAM6 to RGB
-ChunkyBitmap ChunkyBitmap::HAM6toRGB(const std::vector<ColorRegister> &pal) const
+ChunkyBitmap ChunkyBitmap::HAM6toRGB(const Palette &pal) const
 {
 	assert(pal.size() >= 16);
 	assert(BytesPerPixel == 1);
@@ -265,7 +265,7 @@ ChunkyBitmap ChunkyBitmap::HAM6toRGB(const std::vector<ColorRegister> &pal) cons
 }
 
 // Convert AGA HAM8 to RGB
-ChunkyBitmap ChunkyBitmap::HAM8toRGB(const std::vector<ColorRegister> &pal) const
+ChunkyBitmap ChunkyBitmap::HAM8toRGB(const Palette &pal) const
 {
 	assert(pal.size() >= 64);
 	assert(BytesPerPixel == 1);
@@ -291,31 +291,6 @@ ChunkyBitmap ChunkyBitmap::HAM8toRGB(const std::vector<ColorRegister> &pal) cons
 		dest[3] = 0xFF;
 	}
 	return out;
-}
-
-static int NearestColor(const ColorRegister *pal, int r, int g, int b, int first, int num)
-{
-	int bestcolor = first;
-	int bestdist = INT_MAX;
-
-	for (int color = first; color < num; color++)
-	{
-		int rmean = (r + pal[color].red) / 2;
-		int x = r - pal[color].red;
-		int y = g - pal[color].green;
-		int z = b - pal[color].blue;
-		//int dist = x * x + y * y + z * z;
-		int dist = (512 + rmean) * x * x + 1024 * y * y + (767 - rmean) * z * z;
-		if (dist < bestdist)
-		{
-			if (dist == 0)
-				return color;
-
-			bestdist = dist;
-			bestcolor = color;
-		}
-	}
-	return bestcolor;
 }
 
 static const ChunkyBitmap::Diffuser
@@ -381,7 +356,7 @@ static const ChunkyBitmap::Diffuser *const ErrorDiffusionKernels[] = {
 	SierraLite
 };
 
-ChunkyBitmap ChunkyBitmap::RGBtoPalette(const std::vector<ColorRegister> &pal, int dithermode) const
+ChunkyBitmap ChunkyBitmap::RGBtoPalette(const Palette &pal, int dithermode) const
 {
 	ChunkyBitmap out(Width, Height);
 
@@ -396,7 +371,7 @@ ChunkyBitmap ChunkyBitmap::RGBtoPalette(const std::vector<ColorRegister> &pal, i
 	return out;
 }
 
-void ChunkyBitmap::RGB2P_BasicQuantize(ChunkyBitmap &out, const std::vector<ColorRegister> &pal) const
+void ChunkyBitmap::RGB2P_BasicQuantize(ChunkyBitmap &out, const Palette &pal) const
 {
 	assert(out.Width == Width && out.Height == Height && out.BytesPerPixel == 1);
 	assert(BytesPerPixel == 4);
@@ -405,12 +380,12 @@ void ChunkyBitmap::RGB2P_BasicQuantize(ChunkyBitmap &out, const std::vector<Colo
 
 	for (int i = Width * Height; i > 0; --i)
 	{
-		*dest++ = NearestColor(&pal[0], src[0], src[1], src[2], 0, (int)pal.size());
+		*dest++ = pal.NearestColor(src[0], src[1], src[2]);
 		src += 4;
 	}
 }
 
-void ChunkyBitmap::RGB2P_ErrorDiffusion(ChunkyBitmap &out, const std::vector<ColorRegister> &pal, const Diffuser *kernel) const
+void ChunkyBitmap::RGB2P_ErrorDiffusion(ChunkyBitmap &out, const Palette &pal, const Diffuser *kernel) const
 {
 	assert(out.Width == Width && out.Height == Height && out.BytesPerPixel == 1);
 	assert(BytesPerPixel == 4);
@@ -444,7 +419,7 @@ void ChunkyBitmap::RGB2P_ErrorDiffusion(ChunkyBitmap &out, const std::vector<Col
 			int r = std::clamp(src[0] + error[0][x][0] / 65536, 0, 255);
 			int g = std::clamp(src[1] + error[0][x][1] / 65536, 0, 255);
 			int b = std::clamp(src[2] + error[0][x][2] / 65536, 0, 255);
-			int c = NearestColor(&pal[0], r, g, b, 0, (int)pal.size());
+			int c = pal.NearestColor(r, g, b);
 			dest[x] = c;
 
 			// Diffuse the difference between what we wanted and what we got.

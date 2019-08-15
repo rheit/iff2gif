@@ -376,7 +376,7 @@ public:
 		histo.AddPixels(rgb, count, nullptr, nullptr);
 	}
 
-	std::vector<ColorRegister> GetPalette() override {
+	Palette GetPalette() override {
 		if (histo.empty())
 		{
 			return {};

@@ -195,7 +195,7 @@ static int numdigits(int num)
 	return ndig;
 }
 
-static std::vector<ColorRegister> DumbPalette()
+static Palette DumbPalette()
 {
 	// The so-called "web-safe" palette with some extra shades of gray
 	std::vector<ColorRegister> pal;
@@ -218,17 +218,18 @@ static std::vector<ColorRegister> DumbPalette()
 // image data comes from chunky.
 void GIFWriter::AddFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 {
-	std::vector<ColorRegister> palette = bitmap->Palette;
+	Palette palette = bitmap->Palette;
 	int mincodesize = bitmap->NumPlanes;
 
 	if (chunky.BytesPerPixel != 1)
 	{
 		//palette = DumbPalette();
-		std::unique_ptr<Quantizer> quant{ QuantizerFactory[QUANTIZER_NeuQuant](256) };
+		std::unique_ptr<Quantizer> quant{ QuantizerFactory[QUANTIZER_NeuQuant](63) };
 		quant->AddPixels(chunky);
 		palette = quant->GetPalette();
+		palette = palette.Extend();
 		chunky = chunky.RGBtoPalette(palette, DiffusionMode);
-		mincodesize = 8;
+		mincodesize = palette.Bits();
 	}
 
 	if (FrameCount == 0)
@@ -236,7 +237,8 @@ void GIFWriter::AddFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 		printf("%dx%dx%d\n", bitmap->Width, bitmap->Height, bitmap->NumPlanes);
 		PageWidth = chunky.Width;
 		PageHeight = chunky.Height;
-		GlobalPalBits = ExtendPalette(GlobalPal, palette);
+		// GIF palettes must be a power of 2 in size. CMAP chunks have no such restriction.
+		GlobalPal = palette.Extend();
 		DetectBackgroundColor(bitmap, chunky);
 		if (SFrameLength == 0)
 		{ // Automatically decide what should be an adequate length for the frame number
@@ -280,9 +282,9 @@ void GIFWriter::WriteHeader(bool loop)
 {
 	LogicalScreenDescriptor lsd = { LittleShort(PageWidth), LittleShort(PageHeight), 0, BkgColor, 0 };
 
-	if (GlobalPalBits > 0)
+	if (GlobalPal.Bits() > 0)
 	{
-		lsd.Flags = 0xF0 | (GlobalPalBits - 1);
+		lsd.Flags = 0xF0 | (GlobalPal.Bits() - 1);
 	}
 
 	if (SoloMode)
@@ -311,7 +313,7 @@ void GIFWriter::WriteHeader(bool loop)
 	// Write (or skip) palette
 	if (lsd.Flags & 0x80)
 	{
-		assert(GlobalPal.size() == (size_t)1 << GlobalPalBits);
+		assert(GlobalPal.size() == (size_t)1 << GlobalPal.Bits());
 		if (fwrite(&GlobalPal[0], 3, GlobalPal.size(), File) != GlobalPal.size())
 		{
 			BadWrite();
@@ -329,35 +331,7 @@ void GIFWriter::WriteHeader(bool loop)
 	}
 }
 
-// GIF palettes must be a power of 2 in size. CMAP chunks have no such restriction.
-int GIFWriter::ExtendPalette(std::vector<ColorRegister> &dest, const std::vector<ColorRegister> &src)
-{
-	if (src.empty())
-	{
-		return 0;
-	}
-	// What's the closest power of 2 the palette fits in?
-	uint8_t p = 1;
-	size_t numdest = 2, i;
-	while (numdest < src.size() && p < 8)
-		++p, numdest *= 2;
-
-	dest.resize(numdest);
-	// The source could potentially have more colors than we need, but also
-	// might not have enough.
-	for (i = 0; i < std::min(src.size(), numdest); ++i)
-	{
-		dest[i] = src[i];
-	}
-	// Set extras to grayscale
-	for (; i < numdest; ++i)
-	{
-		dest[i].blue = dest[i].green = dest[i].red = uint8_t((i * 255) >> p);
-	}
-	return p;
-}
-
-void GIFWriter::MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const std::vector<ColorRegister> &palette, int mincodesize)
+void GIFWriter::MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const Palette &palette, int mincodesize)
 {
 	GIFFrame newframe, *oldframe;
 	bool palchanged;
@@ -396,7 +370,7 @@ void GIFWriter::MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, con
 	// the frame where it appears.
 	if (palette != GlobalPal)
 	{
-		newframe.LocalPalBits = ExtendPalette(newframe.LocalPalette, palette);
+		newframe.LocalPalette = palette.Extend();
 	}
 	// If the palette has changed from the previous frame, we must redraw the entire frame,
 	// because decoders probably won't repaint the old area with the new palette.
@@ -608,7 +582,7 @@ int GIFWriter::SelectTransparentColor(const ChunkyBitmap &cbprev, const ChunkyBi
 			// The color must be a part of the palette, if the palette has
 			// fewer than 256 colors.
 			int color = (i << 3) + j;
-			return (color < (1 << GlobalPalBits)) ? color : -1;
+			return color < GlobalPal.size() ? color : -1;
 		}
 	}
 	return -1;
@@ -792,7 +766,6 @@ GIFFrame &GIFFrame::operator= (const GIFFrame &o)
 	GCE = o.GCE;
 	IMD = o.IMD;
 	LZW = o.LZW;
-	LocalPalBits = o.LocalPalBits;
 	LocalPalette = o.LocalPalette;
 	return *this;
 }
@@ -803,7 +776,6 @@ GIFFrame &GIFFrame::operator= (GIFFrame &&o) noexcept
 	IMD = o.IMD;
 	LZW = std::move(o.LZW);
 	LocalPalette = std::move(o.LocalPalette);
-	LocalPalBits = o.LocalPalBits;
 	return *this;
 }
 
@@ -819,9 +791,10 @@ bool GIFFrame::Write(FILE *file)
 				return false;
 			}
 		}
-		if (LocalPalBits > 0)
+		int localpalbits = LocalPalette.Bits();
+		if (localpalbits > 0)
 		{
-			IMD.Flags = 0x80 | (LocalPalBits - 1);	// Set Local Color Table Flag
+			IMD.Flags = 0x80 | (localpalbits - 1);	// Set Local Color Table Flag
 		}
 		// Write the image descriptor
 		if (fputc(0x2C, file) /* Identify the Image Separator */ == EOF ||
@@ -830,7 +803,7 @@ bool GIFFrame::Write(FILE *file)
 			return false;
 		}
 		// Write local color table
-		if (LocalPalBits > 0 && fwrite(&LocalPalette[0], 3, LocalPalette.size(), file) != LocalPalette.size())
+		if (localpalbits > 0 && fwrite(&LocalPalette[0], 3, LocalPalette.size(), file) != LocalPalette.size())
 		{
 			return false;
 		}

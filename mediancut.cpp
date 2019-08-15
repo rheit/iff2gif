@@ -95,11 +95,11 @@ class MedianCut : public Quantizer
 public:
 	MedianCut(int maxcolors);
 	void AddPixels(const uint8_t *rgb, size_t count) override;
-	std::vector<ColorRegister> GetPalette() override;
+	Palette GetPalette() override;
 
 private:
-	std::vector<ColorRegister> PaletteFromMCBins(const Histogram &histo, const std::vector<MCBin> &bins);
-	std::vector<ColorRegister> CalcPalette();
+	Palette PaletteFromMCBins(const Histogram &histo, const std::vector<MCBin> &bins);
+	Palette CalcPalette();
 
 	void CheckBounds(int binnum, const MCBin &bin) const;
 
@@ -128,7 +128,7 @@ void MedianCut::AddPixels(const uint8_t *rgb, size_t count)
 	Bins[0].Count += (uint32_t)count;
 }
 
-std::vector<ColorRegister> MedianCut::GetPalette()
+Palette MedianCut::GetPalette()
 {
 	if (Histo.size() <= MaxColors)
 	{ // The image doesn't contain any more colors than we want,
@@ -167,7 +167,7 @@ void MedianCut::CheckBounds(int binnum, const MCBin &bin) const
 #endif
 }
 
-std::vector<ColorRegister> MedianCut::CalcPalette()
+Palette MedianCut::CalcPalette()
 {
 	unsigned i;
 	MCQueueComparator comparator(Bins);
@@ -342,7 +342,7 @@ MCBin MCBin::Split(const Histogram &histo, int splitdim, int splitpt)
 	return newbin;
 }
 
-std::vector<ColorRegister> MedianCut::PaletteFromMCBins(const Histogram &histo, const std::vector<MCBin> &bins)
+Palette MedianCut::PaletteFromMCBins(const Histogram &histo, const std::vector<MCBin> &bins)
 {
 	std::vector<ColorRegister> pal(bins.size());
 	for (size_t i = 0; i < pal.size(); ++i)

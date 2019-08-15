@@ -14,6 +14,7 @@ set(SOURCES
     mediancut.cpp
     neuquant.cpp
     quantizer.cpp
+    palette.cpp
 )
 
 if(WIN32)

@@ -39,7 +39,7 @@ void Quantizer::AddPixels(const ChunkyBitmap &bitmap)
 	AddPixels(bitmap.Pixels, bitmap.Width * bitmap.Height);
 }
 
-std::vector<ColorRegister> Histogram::ToPalette() const
+Palette Histogram::ToPalette() const
 {
 	std::vector<ColorRegister> pal(Histo.size());
 	for (size_t i = 0; i < Histo.size(); ++i)

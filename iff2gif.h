@@ -47,11 +47,52 @@ struct ColorRegister {				/* size = 3 bytes			*/
 	}
 };
 
+class Palette
+{
+public:
+	Palette() {}
+	Palette(std::vector<ColorRegister> &&colors) : Pal(std::move(colors)) { CalcBits(); }
+	Palette(const std::vector<ColorRegister> &colors) : Pal(colors) { CalcBits(); }
+	Palette(Palette &&o) noexcept : Pal(std::move(o.Pal)), NumBits(o.NumBits) {}
+	Palette(const Palette &o) : Pal(o.Pal), NumBits(o.NumBits) {}
+	Palette &operator=(Palette &&o) noexcept { Pal = std::move(o.Pal); NumBits = o.NumBits; return *this; }
+	Palette &operator=(const Palette &o) { Pal = o.Pal; NumBits = o.NumBits; return *this; }
+	ColorRegister &operator[](size_t i) { return Pal[i]; }
+	const ColorRegister &operator[](size_t i) const { return Pal[i]; }
+	bool operator!=(const Palette &o) const { return Pal != o.Pal; }
+	bool operator==(const Palette &o) const { return Pal == o.Pal; }
+	void resize(size_t newsize) { Pal.resize(newsize); CalcBits(); }
+	size_t size() const { return Pal.size(); }
+	size_t empty() const { return Pal.empty(); }
+	int Bits() const { return NumBits; }
+
+	// Return a palette extended to the nearest power of 2 length
+	Palette Extend() const;
+
+	// "Fix" the OCS palette by duplicating the high nibble into the low nibble.
+	void FixOCS();
+
+	// Create the half-bright colors in the palette.
+	void MakeEHB();
+
+	// Find the palette entry most similar to the requested color.
+	int NearestColor(int r, int g, int b) const;
+
+protected:
+	Palette(std::vector<ColorRegister> &&colors, int numbits) : Pal(colors), NumBits(numbits) {}
+
+private:
+	std::vector<ColorRegister> Pal;
+	int NumBits = 0;	// # of bits needed to represent the maximum value in this palette
+
+	void CalcBits();
+};
+
 struct PlanarBitmap
 {
 	int Width = 0, Height = 0, Pitch = 0;
 	int NumPlanes = 0;
-	std::vector<ColorRegister> Palette;
+	Palette Palette;
 	uint8_t *Planes[32]{nullptr};	// Points into PlaneData
 	uint8_t *PlaneData = nullptr;
 	int TransparentColor = -1;
@@ -95,11 +136,11 @@ public:
 	void Expand(int scalex, int scaley) noexcept;
 
 	// Reduce higher bit depth image to 8-bits
-	ChunkyBitmap RGBtoPalette(const std::vector<ColorRegister> &pal, int dithermode) const;
+	ChunkyBitmap RGBtoPalette(const Palette &pal, int dithermode) const;
 
 	// Convert HAM to RGB
-	ChunkyBitmap HAM6toRGB(const std::vector<ColorRegister> &pal) const;
-	ChunkyBitmap HAM8toRGB(const std::vector<ColorRegister> &pal) const;
+	ChunkyBitmap HAM6toRGB(const Palette &pal) const;
+	ChunkyBitmap HAM8toRGB(const Palette &pal) const;
 
 	// Describes an error diffusion kernel. An array of these, terminated with a
 	// weight of 0, describes one kernel. Since a single weighting is often applied
@@ -118,8 +159,8 @@ private:
 	void Expand4(int scalex, int scaley, int srcwidth, int srcheight, const uint32_t *src, uint32_t *dest) noexcept;
 
 	// Helper functions for RGBtoPalette
-	void RGB2P_BasicQuantize(ChunkyBitmap &out, const std::vector<ColorRegister> &pal) const;
-	void RGB2P_ErrorDiffusion(ChunkyBitmap &out, const std::vector<ColorRegister> &pal, const Diffuser *kernel) const;
+	void RGB2P_BasicQuantize(ChunkyBitmap &out, const Palette &pal) const;
+	void RGB2P_ErrorDiffusion(ChunkyBitmap &out, const Palette &pal, const Diffuser *kernel) const;
 
 	// Allocate the buffer
 	void Alloc(int w, int h, int bpp);
@@ -205,7 +246,7 @@ struct GIFFrame
 	GraphicControlExtension GCE;
 	ImageDescriptor IMD;
 	uint8_t LocalPalBits = 0;
-	std::vector<ColorRegister> LocalPalette;
+	Palette LocalPalette;
 	std::vector<uint8_t> LZW;
 };
 
@@ -243,7 +284,7 @@ public:
 	bool empty() const { return Histo.empty(); }
 
 	void AddPixels(const uint8_t *src, size_t numpixels, uint8_t mins[3], uint8_t maxs[3]);
-	std::vector<ColorRegister> ToPalette() const;
+	Palette ToPalette() const;
 
 private:
 	std::vector<HistEntry> Histo;	// Histogram entries
@@ -256,7 +297,7 @@ public:
 	virtual ~Quantizer();
 	virtual void AddPixels(const ChunkyBitmap &bitmap);
 	virtual void AddPixels(const uint8_t *rgb, size_t count) = 0;
-	virtual std::vector<ColorRegister> GetPalette() = 0;
+	virtual Palette GetPalette() = 0;
 };
 
 enum
@@ -320,8 +361,7 @@ private:
 	LogicalScreenDescriptor LSD;
 	uint8_t BkgColor = 0;
 	uint16_t PageWidth = 0, PageHeight = 0;
-	std::vector<ColorRegister> GlobalPal;
-	uint8_t GlobalPalBits = 0;
+	Palette GlobalPal;
 	bool ForcedFrameRate;
 	int DiffusionMode = 0;
 	std::vector<std::pair<unsigned, unsigned>> Clips;
@@ -332,9 +372,9 @@ private:
 	int SExtIndex = -1;		// In solo mode: Character index where extension starts
 	tstring Filename;
 
-	static int ExtendPalette(std::vector<ColorRegister> &dest, const std::vector<ColorRegister> &src);
+	static int ExtendPalette(Palette &dest, const Palette &src);
 	void WriteHeader(bool loop);
-	void MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const std::vector<ColorRegister> &pal, int mincodesize);
+	void MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const Palette &pal, int mincodesize);
 	void MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd);
 	void DetectBackgroundColor(const PlanarBitmap *bitmap, const ChunkyBitmap &chunky);
 	uint8_t SelectDisposal(const PlanarBitmap *bitmap, const ImageDescriptor &imd, const ChunkyBitmap &chunky);

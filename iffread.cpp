@@ -152,7 +152,7 @@ bool FORMReader::NextChunk(IFFChunk **chunk, FORMReader **form)
 // by just shifting each component left 4 bits. This is wrong on
 // anything with a higher color depth, because everything ends up
 // darker than intended.
-static bool CheckOCSPalette(const std::vector<ColorRegister> &pal)
+static bool CheckOCSPalette(const Palette &pal)
 {
 	size_t i = 0;
 
@@ -171,34 +171,6 @@ static bool CheckOCSPalette(const std::vector<ColorRegister> &pal)
 	// If we make it all the way through the for loop, it's probably
 	// an improperly written OCS palette.
 	return i == pal.size();
-}
-
-// "Fix" the OCS palette by duplicating the high nibble into the low nibble.
-void FixOCSPalette(std::vector<ColorRegister> &pal)
-{
-	for (ColorRegister &reg : pal)
-	{
-		reg.red |= reg.red >> 4;
-		reg.green |= reg.green >> 4;
-		reg.blue |= reg.blue >> 4;
-	}
-}
-
-// In EHB mode, the palette has 64 entries, but the second 32 are implied
-// as half intensity versions of the first 64.
-void MakeEHBPalette(std::vector<ColorRegister> &pal)
-{
-	if (pal.empty())
-	{ // What palette?
-		return;
-	}
-	pal.reserve(64);
-	for (int i = 0; i < 32; ++i)
-	{
-		pal[32 + i].red = pal[i].red >> 1;
-		pal[32 + i].green = pal[i].green >> 1;
-		pal[32 + i].blue = pal[i].blue >> 1;
-	}
 }
 
 void UnpackBody(PlanarBitmap *planes, BitmapHeader &header, uint32_t len, const void *data)
@@ -619,7 +591,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 	int speed = -1;
 	int numframes = 0;
 	uint32_t modeid = 0;
-	std::vector<ColorRegister> palette;
+	Palette palette;
 
 	while (form.NextChunk(&chunk, NULL))
 	{
@@ -685,7 +657,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			memcpy(&palette[0], chunk->GetData(), chunk->GetLen());
 			if (CheckOCSPalette(palette))
 			{
-				FixOCSPalette(palette);
+				palette.FixOCS();
 			}
 			break;
 		}
@@ -772,7 +744,7 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 		}
 		if (modeid & EXTRA_HALFBRITE)
 		{
-			MakeEHBPalette(palette);
+			palette.MakeEHB();
 		}
 		// Only overwrite the palette if we loaded a new one.
 		if (!palette.empty())
