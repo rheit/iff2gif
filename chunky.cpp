@@ -356,97 +356,160 @@ static const ChunkyBitmap::Diffuser *const ErrorDiffusionKernels[] = {
 	SierraLite
 };
 
-ChunkyBitmap ChunkyBitmap::RGBtoPalette(const Palette &pal, int dithermode) const
+class Palettizer
 {
-	ChunkyBitmap out(Width, Height);
+public:
+	Palettizer(const ChunkyBitmap &bitmap, const Palette &pal) : Bitmap(bitmap), Pal(pal) { assert(bitmap.BytesPerPixel == 4); }
+	virtual ~Palettizer() {}
+	virtual void GetPixels(uint8_t *dest, int x, int y, int width) = 0;
 
-	if (dithermode <= 0 || dithermode > countof(ErrorDiffusionKernels))
-	{
-		RGB2P_BasicQuantize(out, pal);
-	}
-	else
-	{
-		RGB2P_ErrorDiffusion(out, pal, ErrorDiffusionKernels[dithermode - 1]);
-	}
-	return out;
-}
+protected:
+	const ChunkyBitmap &Bitmap;
+	const Palette &Pal;
+};
 
-void ChunkyBitmap::RGB2P_BasicQuantize(ChunkyBitmap &out, const Palette &pal) const
+class NoDitherPalettizer : public Palettizer
 {
-	assert(out.Width == Width && out.Height == Height && out.BytesPerPixel == 1);
-	assert(BytesPerPixel == 4);
-	const uint8_t *src = Pixels;
-	uint8_t *dest = out.Pixels;
+public:
+	NoDitherPalettizer(const ChunkyBitmap &bitmap, const Palette &pal) : Palettizer(bitmap, pal) {}
+	void GetPixels(uint8_t *dest, int x, int y, int width) override;
+};
 
-	for (int i = Width * Height; i > 0; --i)
+void NoDitherPalettizer::GetPixels(uint8_t *dest, int x, int y, int width)
+{
+	const uint8_t *src = Bitmap.Pixels + y * Bitmap.Pitch + x * 4;
+	while (width--)
 	{
-		*dest++ = pal.NearestColor(src[0], src[1], src[2]);
+		*dest++ = Pal.NearestColor(src[0], src[1], src[2]);
 		src += 4;
 	}
 }
 
-void ChunkyBitmap::RGB2P_ErrorDiffusion(ChunkyBitmap &out, const Palette &pal, const Diffuser *kernel) const
+class ErrorDiffusionPalettizer : public Palettizer
 {
-	assert(out.Width == Width && out.Height == Height && out.BytesPerPixel == 1);
-	assert(BytesPerPixel == 4);
-	const uint8_t *src = Pixels;
-	uint8_t *dest = out.Pixels;
+public:
+	ErrorDiffusionPalettizer(const ChunkyBitmap &bitmap, const Palette &pal, const ChunkyBitmap::Diffuser *kernel);
+	void GetPixels(uint8_t *dest, int x, int y, int width) override;
+
+protected:
+	void ShiftError(int newy);
+
+	const ChunkyBitmap::Diffuser *Kernel;
 
 	// None of the error diffusion kernels need to keep track of more than 3
 	// rows of error, so this is enough. Error is stored as 16.16 fixed point,
 	// so the accumulated error can be applied to the output color with just
 	// a bit shift and no division.
-	std::vector<std::array<int, 3>> error[3];
-	for (auto &arr : error)
+	std::vector<std::array<int, 3>> Error[3];
+
+	// Row of image for first row of Error[]
+	int ErrorY = 0;
+};
+
+ErrorDiffusionPalettizer::ErrorDiffusionPalettizer(const ChunkyBitmap &bitmap, const Palette &pal,
+	const ChunkyBitmap::Diffuser *kernel)
+	: Palettizer(bitmap, pal), Kernel(kernel)
+{
+	for (auto &arr : Error)
 	{
-		arr.resize(Width);
+		arr.resize(bitmap.Width);
 	}
+}
 
-	for (int y = Height; y > 0; --y, dest += Width)
+void ErrorDiffusionPalettizer::ShiftError(int newy)
+{
+	assert(newy > ErrorY && "Please don't go backward");
+	int zeroloc;
+
+	if (newy == ErrorY + 1)
+	{ // Advance one row
+		Error[0].swap(Error[1]);	// Move row 1 to row 0
+		Error[1].swap(Error[2]);	// Move row 2 to row 1
+		zeroloc = 2;				// Zero row 2
+	}
+	else if (newy == ErrorY + 2)
+	{ // Advance two rows
+		Error[0].swap(Error[2]);	// Move row 2 to row 0
+		zeroloc = 1;				// Zero rows 1 and 2
+	}
+	else
+	{ // Advancing three or more rows
+		zeroloc = 0;				// Zero all rows
+	}
+	for (; zeroloc < 3; ++zeroloc)
 	{
-		for (int x = 0; x < Width; ++x, src += 4)
-		{
-			// Combine error with the pixel at this location and output
-			// the palette entry that most closely matches it. The combined
-			// color must be clamped to valid values, or you can end up with
-			// bright sparkles in dark areas and vice-versa if the combined
-			// color is "super-bright" or "super-dark". e.g. If error
-			// diffusion made a black color "super-black", the best we can
-			// actually output is black, so the difference between black and
-			// the theoretical "super-black" we "wanted" could be diffused
-			// out to produce grays specks in what should be a solid black
-			// area if we don't clamp the "super-black" to a regular black.
-			int r = std::clamp(src[0] + error[0][x][0] / 65536, 0, 255);
-			int g = std::clamp(src[1] + error[0][x][1] / 65536, 0, 255);
-			int b = std::clamp(src[2] + error[0][x][2] / 65536, 0, 255);
-			int c = pal.NearestColor(r, g, b);
-			dest[x] = c;
+		std::fill(Error[zeroloc].begin(), Error[zeroloc].end(), std::array<int, 3>());
+	}
+	ErrorY = newy;
+}
 
-			// Diffuse the difference between what we wanted and what we got.
-			r -= pal[c].red;
-			g -= pal[c].green;
-			b -= pal[c].blue;
-			// For each weight...
-			for (int i = 0; kernel[i].weight != 0; ++i)
+void ErrorDiffusionPalettizer::GetPixels(uint8_t *dest, int x, int y, int width)
+{
+	if (y != ErrorY)
+	{
+		ShiftError(y);
+	}
+	const uint8_t *src = Bitmap.Pixels + y * Bitmap.Pitch + x * 4;
+	for (; width--; ++x, src += 4)
+	{
+		// Combine error with the pixel at this location and output
+		// the palette entry that most closely matches it. The combined
+		// color must be clamped to valid values, or you can end up with
+		// bright sparkles in dark areas and vice-versa if the combined
+		// color is "super-bright" or "super-dark". e.g. If error
+		// diffusion made a black color "super-black", the best we can
+		// actually output is black, so the difference between black and
+		// the theoretical "super-black" we "wanted" could be diffused
+		// out to produce grays specks in what should be a solid black
+		// area if we don't clamp the "super-black" to a regular black.
+		int r = std::clamp(src[0] + (Error[0][x][0] >> 16), 0, 255);
+		int g = std::clamp(src[1] + (Error[0][x][1] >> 16), 0, 255);
+		int b = std::clamp(src[2] + (Error[0][x][2] >> 16), 0, 255);
+		int c = Pal.NearestColor(r, g, b);
+		dest[x] = c;
+
+		// Diffuse the difference between what we wanted and what we got.
+		r -= Pal[c].red;
+		g -= Pal[c].green;
+		b -= Pal[c].blue;
+		// For each weight...
+		for (const ChunkyBitmap::Diffuser *desc = Kernel; desc->weight != 0; ++desc)
+		{
+			int rw = r * desc->weight;
+			int gw = g * desc->weight;
+			int bw = b * desc->weight;
+			// ...apply that weight to one or more pixels.
+			for (int j = 0; j < countof(desc->to) && desc->to[j].x | desc->to[j].y; ++j)
 			{
-				int rw = r * kernel[i].weight;
-				int gw = g * kernel[i].weight;
-				int bw = b * kernel[i].weight;
-				// ...apply that weight to one or more pixels.
-				for (int j = 0; j < countof(kernel[i].to) && kernel[i].to[j].x | kernel[i].to[j].y; ++j)
+				int xx = x + desc->to[j].x;
+				if (xx >= 0 && xx < Bitmap.Width)
 				{
-					int xx = x + kernel[i].to[j].x;
-					if (xx >= 0 && xx < Width)
-					{
-						error[kernel[i].to[j].y][xx][0] += rw;
-						error[kernel[i].to[j].y][xx][1] += gw;
-						error[kernel[i].to[j].y][xx][2] += bw;
-					}
+					Error[desc->to[j].y][xx][0] += rw;
+					Error[desc->to[j].y][xx][1] += gw;
+					Error[desc->to[j].y][xx][2] += bw;
 				}
 			}
 		}
-		error[0].swap(error[1]);	// Move row 1 to row 0
-		error[1].swap(error[2]);	// Move row 2 to row 1
-		std::fill(error[2].begin(), error[2].end(), std::array<int, 3>());	// Zero row 2
 	}
+}
+
+ChunkyBitmap ChunkyBitmap::RGBtoPalette(const Palette &pal, int dithermode) const
+{
+	ChunkyBitmap out(Width, Height);
+	std::unique_ptr<Palettizer> palettizer;
+
+	if (dithermode <= 0 || dithermode > countof(ErrorDiffusionKernels))
+	{
+		palettizer = std::make_unique<NoDitherPalettizer>(*this, pal);
+	}
+	else
+	{
+		palettizer = std::make_unique<ErrorDiffusionPalettizer>(*this, pal,
+			ErrorDiffusionKernels[dithermode - 1]);
+	}
+	for (int y = 0; y < Height; ++y)
+	{
+		palettizer->GetPixels(out.Pixels + y * out.Pitch, 0, y, Width);
+	}
+	return out;
 }

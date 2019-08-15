@@ -224,7 +224,7 @@ void GIFWriter::AddFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 	if (chunky.BytesPerPixel != 1)
 	{
 		//palette = DumbPalette();
-		std::unique_ptr<Quantizer> quant{ QuantizerFactory[QUANTIZER_NeuQuant](63) };
+		std::unique_ptr<Quantizer> quant{ QuantizerFactory[QUANTIZER_NeuQuant](256) };
 		quant->AddPixels(chunky);
 		palette = quant->GetPalette();
 		palette = palette.Extend();
