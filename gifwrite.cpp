@@ -455,7 +455,8 @@ void GIFWriter::DetectBackgroundColor(const PlanarBitmap *bitmap, const ChunkyBi
 	}
 }
 
-void GIFWriter::MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd)
+template<typename T>
+void MinArea(const T *prev, const T *cur, ImageDescriptor &imd)
 {
 	int32_t start = -1;
 	int32_t end = imd.Width * imd.Height;
@@ -465,7 +466,7 @@ void GIFWriter::MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, I
 	// Scan from beginning to find first changed pixel.
 	while (++start < end)
 	{
-		if (prev.Pixels[start] != cur.Pixels[start])
+		if (prev[start] != cur[start])
 			break;
 	}
 	if (start == end)
@@ -478,7 +479,7 @@ void GIFWriter::MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, I
 	// Scan from end to find last changed pixel.
 	while (--end > start)
 	{
-		if (prev.Pixels[end] != cur.Pixels[end])
+		if (prev[end] != cur[end])
 			break;
 	}
 	// Now we know the top and bottom of the changed area, but not the left and right.
@@ -490,7 +491,7 @@ void GIFWriter::MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, I
 		p = top * imd.Width + x;
 		for (int y = top; y <= bot; ++y, p += imd.Width)
 		{
-			if (prev.Pixels[p] != cur.Pixels[p])
+			if (prev[p] != cur[p])
 				goto gotleft;
 		}
 	}
@@ -502,7 +503,7 @@ gotleft:
 		p = top * imd.Width + x;
 		for (int y = top; y <= bot; ++y, p += imd.Width)
 		{
-			if (prev.Pixels[p] != cur.Pixels[p])
+			if (prev[p] != cur[p])
 				goto gotright;
 		}
 	}
@@ -513,6 +514,20 @@ gotright:
 	imd.Top = top;
 	imd.Width = right - left + 1;
 	imd.Height = bot - top + 1;
+}
+
+void GIFWriter::MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd)
+{
+	assert(prev.BytesPerPixel == cur.BytesPerPixel);
+	if (prev.BytesPerPixel == 1)
+	{
+		MinArea<uint8_t>(prev.Pixels, cur.Pixels, imd);
+	}
+	else
+	{
+		assert(prev.BytesPerPixel == 4);
+		MinArea<uint32_t>(reinterpret_cast<uint32_t *>(prev.Pixels), reinterpret_cast<uint32_t *>(cur.Pixels), imd);
+	}
 }
 
 // Select the disposal method for this frame.
