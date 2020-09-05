@@ -188,3 +188,12 @@ FakesAssemblies/
 GeneratedArtifacts/
 _Pvt_Extensions/
 ModelManifest.xml
+
+# CMake files
+CMakeFiles
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Compiled program
+iff2gif

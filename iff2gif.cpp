@@ -21,6 +21,16 @@
 #include <fstream>
 #include "iff2gif.h"
 
+#ifdef __linux__
+#include <cstring>
+#include <climits>
+#include <algorithm>
+#include <getopt.h>
+
+#undef _tcspbrk
+#define _tcspbrk strpbrk
+#endif
+
 static int usage(_TCHAR *progname)
 {
 	_ftprintf(stderr, _T(
@@ -80,7 +90,7 @@ void sortclips(std::vector<std::pair<unsigned, unsigned>> &clips)
 	std::sort(begin(clips), end(clips));
 
 	// Now check for overlapping or abutting ranges and combine them.
-	for (size_t i = 1; i < size(clips); ++i)
+	for (size_t i = 1; i < clips.size(); ++i)
 	{
 		if (clips[i - 1].second >= clips[i].first - 1)
 		{
@@ -184,3 +194,10 @@ int _tmain(int argc, _TCHAR* argv[])
 	LoadFile(argv[1], infile, writer);
 	return 0;
 }
+
+#ifdef __linux__
+int main(int argc, char *argv[])
+{
+	return _tmain(argc, argv);
+}
+#endif

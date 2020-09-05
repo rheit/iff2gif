@@ -21,6 +21,12 @@
 #include <algorithm>
 #include "iff2gif.h"
 
+#ifdef __linux__
+#include <cstring>
+#include <climits>
+#include <cmath>
+#endif
+
 ChunkyBitmap::ChunkyBitmap(const PlanarBitmap &planar, int scalex, int scaley)
 {
 	assert(scalex != 0);
