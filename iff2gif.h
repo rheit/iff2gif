@@ -19,6 +19,7 @@
 #include <vector>
 #include <queue>
 #include <iostream>
+#include <memory>
 #include "types.h"
 #include "iff.h"
 
@@ -58,7 +59,7 @@ public:
 	ChunkyBitmap(const ChunkyBitmap &o, int fillcolor);
 	ChunkyBitmap(int w, int h, int bpp = 1);
 	ChunkyBitmap(ChunkyBitmap &&o) noexcept;
-	ChunkyBitmap &ChunkyBitmap::operator=(ChunkyBitmap &&o) noexcept;
+	ChunkyBitmap &operator=(ChunkyBitmap &&o) noexcept;
 	~ChunkyBitmap();
 
 	bool IsEmpty() noexcept { return Pixels == nullptr; }

@@ -27,10 +27,10 @@ typedef unsigned int bit32;
 
 #define table( name, n ) \
    static bit32 name[ 16 ] = { \
-      0x00000000<<n,0x00000001<<n,0x00000100<<n,0x00000101<<n, \
-      0x00010000<<n,0x00010001<<n,0x00010100<<n,0x00010101<<n, \
-      0x01000000<<n,0x01000001<<n,0x01000100<<n,0x01000101<<n, \
-      0x01010000<<n,0x01010001<<n,0x01010100<<n,0x01010101<<n };
+      static_cast<bit32>(0x00000000<<n),static_cast<bit32>(0x00000001<<n),static_cast<bit32>(0x00000100<<n),static_cast<bit32>(0x00000101<<n), \
+      static_cast<bit32>(0x00010000<<n),static_cast<bit32>(0x00010001<<n),static_cast<bit32>(0x00010100<<n),static_cast<bit32>(0x00010101<<n), \
+      static_cast<bit32>(0x01000000<<n),static_cast<bit32>(0x01000001<<n),static_cast<bit32>(0x01000100<<n),static_cast<bit32>(0x01000101<<n), \
+      static_cast<bit32>(0x01010000<<n),static_cast<bit32>(0x01010001<<n),static_cast<bit32>(0x01010100<<n),static_cast<bit32>(0x01010101<<n) };
 
 table(ltab0, 0)
 table(ltab1, 1)

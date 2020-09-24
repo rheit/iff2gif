@@ -21,6 +21,11 @@
 #include <assert.h>
 #include <stdio.h>
 
+#ifdef __linux__
+#include <cstring>
+#include <climits>
+#endif
+
 #include "iff2gif.h"
 
 // GIF restricts codes to 12 bits max
