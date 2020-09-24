@@ -22,6 +22,8 @@
 #include <assert.h>
 #include <numeric>
 #include <random>
+#include <cfloat>
+#include <algorithm>
 #include "iff2gif.h"
 
 static constexpr int ncycles = 100;			// no. of learning cycles
@@ -41,9 +43,9 @@ static constexpr int radiusdec = 30; // factor of 1/30 each cycle
 static constexpr int alphabiasshift = 10;			// alpha starts at 1
 static constexpr int initalpha = 1 << alphabiasshift; // biased by 10 bits
 
-static constexpr double gamma = 1024.0;
+static constexpr double nqgamma = 1024.0;
 static constexpr double beta = 1.0 / 1024.0;
-static constexpr double betagamma = beta * gamma;
+static constexpr double betagamma = beta * nqgamma;
 
 // Given a histogram, create a random array of pixels where the number
 // of times a color appears is proportional to its count in the histogram.

@@ -37,7 +37,7 @@ IFFChunk::IFFChunk(std::istream &file, uint32_t id, uint32_t len)
 
 	if (!file.read(reinterpret_cast<char *>(ChunkData), len))
 	{
-		fprintf(stderr, "Only read %llu of %u bytes in chunk %4s\n", file.gcount(), len, (char *)&ChunkID);
+		fprintf(stderr, "Only read %llu of %u bytes in chunk %4s\n", (unsigned long long)file.gcount(), len, (char *)&ChunkID);
 		ChunkID = 0;
 	}
 	if (len & 1)

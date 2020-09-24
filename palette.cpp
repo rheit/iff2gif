@@ -17,6 +17,7 @@
 */
 
 #include "iff2gif.h"
+#include <climits>
 
 // Sets NumBits according to the size of the palette.
 void Palette::CalcBits()

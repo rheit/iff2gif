@@ -92,7 +92,7 @@ struct PlanarBitmap
 {
 	int Width = 0, Height = 0, Pitch = 0;
 	int NumPlanes = 0;
-	Palette Palette;
+	class Palette Palette;
 	uint8_t *Planes[32]{nullptr};	// Points into PlaneData
 	uint8_t *PlaneData = nullptr;
 	int TransparentColor = -1;

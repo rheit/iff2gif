@@ -57,7 +57,7 @@ struct MCQueueComparator
 	std::vector<MCBin> &Bins;
 
 	MCQueueComparator(std::vector<MCBin> &bins) : PopOnly(true), Bins(bins) {}
-	MCQueueComparator &MCQueueComparator::operator=(const MCQueueComparator &o)
+	MCQueueComparator &operator=(const MCQueueComparator &o)
 	{ // This is only used when clearing the priority queue. It will not copy
 	  // the Bins reference. (Is that even possible?)
 		PopOnly = o.PopOnly;
