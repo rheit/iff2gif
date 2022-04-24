@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
 
 project(iff2gif)
 
@@ -15,6 +16,10 @@ set(SOURCES
     neuquant.cpp
     quantizer.cpp
     palette.cpp
+
+    types.h
+    iff.h
+    iff2gif.h
 )
 
 if(WIN32)

@@ -75,6 +75,14 @@ ChunkyBitmap::~ChunkyBitmap()
 	}
 }
 
+ChunkyBitmap::ChunkyBitmap(const ChunkyBitmap& o)
+	: Width(o.Width), Height(o.Height), Pitch(o.Pitch),
+	  BytesPerPixel(o.BytesPerPixel)
+{
+	Pixels = new uint8_t[Pitch * Height];
+	memcpy(Pixels, o.Pixels, Pitch * Height);
+}
+
 ChunkyBitmap::ChunkyBitmap(ChunkyBitmap &&o) noexcept
 	: Width(o.Width), Height(o.Height), Pitch(o.Pitch),
 	  BytesPerPixel(o.BytesPerPixel), Pixels(o.Pixels)
@@ -98,6 +106,16 @@ ChunkyBitmap &ChunkyBitmap::operator=(ChunkyBitmap &&o) noexcept
 		o.Clear(false);
 	}
 	return *this;
+}
+
+bool ChunkyBitmap::operator==(ChunkyBitmap &o) noexcept
+{
+	if (&o == this) return true;
+	return Width == o.Width
+		&& Height == o.Height
+		&& Pitch == o.Pitch
+		&& BytesPerPixel == o.BytesPerPixel
+		&& 0 == memcmp(Pixels, o.Pixels, Pitch * Height);
 }
 
 void ChunkyBitmap::Clear(bool release) noexcept

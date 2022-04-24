@@ -78,12 +78,79 @@ PlanarBitmap::PlanarBitmap(const PlanarBitmap &o)
 	}
 }
 
+PlanarBitmap::PlanarBitmap(PlanarBitmap &&o) noexcept
+{
+	Width = o.Width;
+	Height = o.Height;
+	Pitch = o.Pitch;
+	NumPlanes = o.NumPlanes;
+	Palette = std::move(o.Palette);
+	TransparentColor = o.TransparentColor;
+	Interleave = o.Interleave;
+	Delay = o.Delay;
+	Rate = o.Rate;
+	ModeID = o.ModeID;
+	PlaneData = o.PlaneData;
+	memcpy(Planes, o.Planes, sizeof(Planes));
+
+	o.PlaneData = nullptr;
+	o.Width = 0;
+	o.Height = 0;
+	o.NumPlanes = 0;
+}
+
 PlanarBitmap::~PlanarBitmap()
 {
 	if (PlaneData != nullptr)
 	{
 		delete[] PlaneData;
 	}
+}
+
+PlanarBitmap &PlanarBitmap::operator=(PlanarBitmap &&o) noexcept
+{
+	if (PlaneData != nullptr)
+	{
+		delete[] PlaneData;
+	}
+	Width = o.Width;
+	Height = o.Height;
+	Pitch = o.Pitch;
+	NumPlanes = o.NumPlanes;
+	Palette = std::move(o.Palette);
+	TransparentColor = o.TransparentColor;
+	Interleave = o.Interleave;
+	Delay = o.Delay;
+	Rate = o.Rate;
+	ModeID = o.ModeID;
+	PlaneData = o.PlaneData;
+	memcpy(Planes, o.Planes, sizeof(Planes));
+
+	o.PlaneData = nullptr;
+	o.Width = 0;
+	o.Height = 0;
+	o.NumPlanes = 0;
+
+	return *this;
+}
+
+bool PlanarBitmap::operator==(const PlanarBitmap &o) noexcept
+{
+	if (this == &o) return true;
+	return Width == o.Width
+		&& Height == o.Height
+		&& Pitch == o.Pitch
+		&& NumPlanes == o.NumPlanes
+		&& Palette == o.Palette
+		&& ModeID == o.ModeID
+
+// Don't consider non-image data when determining equality
+//		&& TransparentColor == o.TransparentColor
+//		&& Interleave == o.Interleave
+//		&& Delay == o.Delay
+//		&& Rate == o.Rate
+
+		&& 0 == memcmp(PlaneData, o.PlaneData, Pitch * Height * NumPlanes);
 }
 
 void PlanarBitmap::FillBitplane(int plane, bool set)

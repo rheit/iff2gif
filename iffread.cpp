@@ -728,6 +728,11 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			}
 			planes = ApplyDelta(planes, &anheader, chunk->GetLen(), chunk->GetData());
 			break;
+
+		default:
+			//printf("Ignoring chunk %c%c%c%c\n",
+			//	chunk->GetID() & 255, (chunk->GetID() >> 8) & 255, (chunk->GetID() >> 16) & 255, chunk->GetID() >> 24);
+			break;
 		}
 		delete chunk;
 	}

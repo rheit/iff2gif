@@ -104,7 +104,13 @@ struct PlanarBitmap
 
 	PlanarBitmap(int w, int h, int nPlanes);
 	PlanarBitmap(const PlanarBitmap &o);
+	PlanarBitmap(PlanarBitmap &&o) noexcept;
 	~PlanarBitmap();
+
+	PlanarBitmap &operator=(PlanarBitmap &&o) noexcept;
+
+	bool operator==(const PlanarBitmap &o) noexcept;
+	bool operator!=(const PlanarBitmap &o) noexcept { return !(*this == o); }
 
 	void FillBitplane(int plane, bool set);
 
@@ -123,10 +129,12 @@ public:
 	ChunkyBitmap(const PlanarBitmap &o, int scalex = 1, int scaley = 1);
 	ChunkyBitmap(const ChunkyBitmap &o, int fillcolor);
 	ChunkyBitmap(int w, int h, int bpp = 1);
+	ChunkyBitmap(const ChunkyBitmap &o);
 	ChunkyBitmap(ChunkyBitmap &&o) noexcept;
 	ChunkyBitmap &operator=(ChunkyBitmap &&o) noexcept;
 	~ChunkyBitmap();
 
+	bool operator==(ChunkyBitmap& o) noexcept;
 	bool IsEmpty() noexcept { return Pixels == nullptr; }
 	void Clear(bool release=true) noexcept;
 	void SetSolidColor(int color) noexcept;
@@ -157,10 +165,6 @@ private:
 	void Expand1(int scalex, int scaley, int srcwidth, int srcheight, const uint8_t *src, uint8_t *dest) noexcept;
 	void Expand2(int scalex, int scaley, int srcwidth, int srcheight, const uint16_t *src, uint16_t *dest) noexcept;
 	void Expand4(int scalex, int scaley, int srcwidth, int srcheight, const uint32_t *src, uint32_t *dest) noexcept;
-
-	// Helper functions for RGBtoPalette
-	void RGB2P_BasicQuantize(ChunkyBitmap &out, const Palette &pal) const;
-	void RGB2P_ErrorDiffusion(ChunkyBitmap &out, const Palette &pal, const Diffuser *kernel) const;
 
 	// Allocate the buffer
 	void Alloc(int w, int h, int bpp);
@@ -320,24 +324,26 @@ public:
 	GIFFrameQueue();
 	~GIFFrameQueue();
 
-	bool Enqueue(GIFFrame &&frame);
+	bool Enqueue(GIFFrame &&frame, const PlanarBitmap *source_bitmap);
 	bool Flush();
 	void SetDropFrames(int count) { FinalFramesToDrop = count; }
-	GIFFrame* MostRecent() { return Queue.empty() ? nullptr : &Queue.back(); }
+	int GetDropFrames() const { return FinalFramesToDrop; }
+	GIFFrame *MostRecent() { return Queue.empty() ? nullptr : &Queue.back().first; }
 	unsigned int Total() { return TotalQueued; }
 	void SetFile(FILE *f) { File = f; }
 
 private:
-	bool Shift();
-
 	// As long as this is at least as large as the maximum interleave, it
 	// doesn't really matter what this is.
 	enum { MAX_QUEUE_SIZE = 8 };
 
+	bool Shift();
+
 	FILE *File;
 	size_t FinalFramesToDrop;		// ANIMs duplicate frames at the end to facilitate looping
-	std::queue<GIFFrame> Queue;		// oldest frames come first
 	unsigned TotalQueued = 0;		// Total # of frames that have ever been queued (not just queued now)
+	std::vector<std::pair<GIFFrame,PlanarBitmap>> Queue;		// oldest frames come first
+	std::vector<PlanarBitmap> FirstFrames;		// For checking if we really want to drop frames
 };
 
 class GIFWriter
@@ -372,7 +378,8 @@ private:
 	int SExtIndex = -1;		// In solo mode: Character index where extension starts
 	tstring Filename;
 
-	static int ExtendPalette(Palette &dest, const Palette &src);
+	int FirstDelay = 0;		// Delay from the first frame
+
 	void WriteHeader(bool loop);
 	void MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, const Palette &pal, int mincodesize);
 	void MinimumArea(const ChunkyBitmap &prev, const ChunkyBitmap &cur, ImageDescriptor &imd);
@@ -383,6 +390,7 @@ private:
 	void BadWrite();
 	void CheckForIndexSpot();
 	void GenFilename();
+	void AddDelay(GIFFrame* frame, int delay);
 };
 
 #define ID_PP20 MAKE_ID('P','P','2','0')

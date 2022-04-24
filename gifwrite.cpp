@@ -52,7 +52,7 @@ private:
 	uint8_t Chunk[256];		// first byte is length
 
 	// The dictionary maps code strings to code words. Each possible pixel
-	// value [0..size of pallete) is automatically its own code word. A code
+	// value [0..size of palette) is automatically its own code word. A code
 	// string consists of a code word plus an appended pixel value. The first
 	// time a code string is encountered, it is inserted into the dictionary
 	// and becomes another code word. Thus, it is enough to represent a code
@@ -118,6 +118,14 @@ bool GIFWriter::FinishFile()
 	bool succ = true;
 	if (File != nullptr)
 	{
+		// If the first frame had a delay, set it on the final frame
+		// for looping purposes. (ANIM delays the start of this frame,
+		// but GIF delays the start of the next frame.)
+		auto oldframe = WriteQueue.MostRecent();
+		if (oldframe != nullptr)
+		{
+			AddDelay(oldframe, FirstDelay);
+		}
 		// The 0x3B is a trailer byte to terminate the GIF.
 		succ = WriteQueue.Flush() && fputc(0x3B, File) != EOF;
 		if (succ)
@@ -245,6 +253,7 @@ void GIFWriter::AddFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky)
 		  // part of the filename in solo mode if we haven't already got a length for it.
 			SFrameLength = numdigits(bitmap->NumFrames);
 		}
+		FirstDelay = bitmap->Delay;
 	}
 	if (bitmap->Rate > 0 && !ForcedFrameRate)
 	{
@@ -349,20 +358,10 @@ void GIFWriter::MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, con
 	// Update properties on the preceding frame that couldn't be determined
 	// until this frame.
 	oldframe = WriteQueue.MostRecent();
-	if (oldframe != NULL)
+	if (oldframe != nullptr)
 	{
 		oldframe->GCE.Flags |= SelectDisposal(bitmap, newframe.IMD, chunky) << 2;
-		if (bitmap->Delay != 0)
-		{
-			// GIF timing is in 1/100 sec. ANIM timing is in multiples of an FPS clock.
-			uint32_t tick = TotalTicks + bitmap->Delay;
-			uint32_t lasttime = GIFTime;
-			uint32_t nowtime = tick * 100 / FrameRate;
-			int delay = nowtime - lasttime;
-			oldframe->SetDelay(delay);
-			TotalTicks = tick;
-			GIFTime += delay;
-		}
+		AddDelay(oldframe, bitmap->Delay);
 	}
 	// Check for a palette different from the one we recorded for the global color table.
 	// Unlike ANIMs, where a CMAP chunk in one frame applies to that frame and all
@@ -423,7 +422,7 @@ void GIFWriter::MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, con
 		}
 	}
 	// Queue this frame for later writing, possibly flushing one frame to disk.
-	if (!WriteQueue.Enqueue(std::move(newframe)))
+	if (!WriteQueue.Enqueue(std::move(newframe), bitmap))
 	{
 		BadWrite();
 	}
@@ -432,6 +431,25 @@ void GIFWriter::MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, con
 		chunky.Clear();
 	}
 	PrevFrame = std::move(chunky);
+}
+
+void GIFWriter::AddDelay(GIFFrame* oldframe, int delay)
+{
+	// GIF timing is in 1/100 sec. ANIM timing is in multiples of an FPS clock.
+	// GIF delay is the delay until you show the next frame.
+	// ANIM delay is the delay until you show this frame.
+	// So ANIM delay needs to be moved one frame earlier for GIF delay and
+	// scaled appropriately.
+	if (delay != 0)
+	{
+		uint32_t tick = TotalTicks + delay;
+		uint32_t lasttime = GIFTime;
+		uint32_t nowtime = tick * 100 / FrameRate;
+		int delay = nowtime - lasttime;
+		oldframe->SetDelay(delay);
+		TotalTicks = tick;
+		GIFTime += delay;
+	}
 }
 
 void GIFWriter::DetectBackgroundColor(const PlanarBitmap *bitmap, const ChunkyBitmap &chunky)
@@ -847,6 +865,23 @@ GIFFrameQueue::~GIFFrameQueue()
 bool GIFFrameQueue::Flush()
 {
 	bool wrote = true;
+
+	if (Queue.empty()) return true;
+
+	// Check that the last X frames match the first X frames. If not, then ignore FinalFramesToDrop
+	if (FinalFramesToDrop)
+	{
+		assert(FinalFramesToDrop <= Queue.size());
+		for (int i = 0; i < FinalFramesToDrop; ++i)
+		{
+			if (FirstFrames[i] != Queue[Queue.size() - FinalFramesToDrop + i].second)
+			{
+				FinalFramesToDrop = 0;
+				break;
+			}
+		}
+	}
+
 	while (Queue.size() > FinalFramesToDrop)
 	{
 		if (!Shift())
@@ -855,18 +890,22 @@ bool GIFFrameQueue::Flush()
 			break;
 		}
 	}
-	Queue = {};
+	Queue.clear();
 	return wrote;
 }
 
-bool GIFFrameQueue::Enqueue(GIFFrame &&frame)
+bool GIFFrameQueue::Enqueue(GIFFrame &&frame, const PlanarBitmap *source_bitmap)
 {
 	bool wrote = true;
 	if (Queue.size() >= MAX_QUEUE_SIZE)
 	{
 		wrote = Shift();
 	}
-	Queue.emplace(std::move(frame));
+	Queue.push_back(std::make_pair(std::move(frame), *source_bitmap));
+	if (FirstFrames.size() < MAX_QUEUE_SIZE)
+	{
+		FirstFrames.push_back(*source_bitmap);
+	}
 	TotalQueued++;
 	return wrote;
 }
@@ -877,8 +916,8 @@ bool GIFFrameQueue::Shift()
 	bool wrote = true;
 	if (!Queue.empty())
 	{
-		wrote = Queue.front().Write(File);
-		Queue.pop();
+		wrote = Queue.front().first.Write(File);
+		Queue.erase(Queue.begin());
 	}
 	return wrote;
 }
