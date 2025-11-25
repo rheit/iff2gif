@@ -21,7 +21,7 @@
 #include <fstream>
 #include "iff2gif.h"
 
-#ifdef __linux__
+#if defined(__linux__) or defined(__MACH__)
 #include <cstring>
 #include <climits>
 #include <algorithm>
@@ -195,7 +195,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	return 0;
 }
 
-#ifdef __linux__
+#if defined(__linux__) or defined(__MACH__)
 int main(int argc, char *argv[])
 {
 	return _tmain(argc, argv);
