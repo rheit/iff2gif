@@ -22,7 +22,7 @@
 #include <iostream>
 #include <assert.h>
 #include <string.h>
-#include <malloc.h>
+#include <stdlib.h>
 #include <math.h>
 
 #include "iff2gif.h"
