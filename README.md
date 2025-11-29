@@ -1,3 +1,5 @@
+![build workflow](https://github.com/rheit/iff2gif/actions/workflows/cmake-multi-platform.yml/badge.svg)
+
 # iff2gif
 #### Convert IFF ILBM/ANIM files to GIF files
 
