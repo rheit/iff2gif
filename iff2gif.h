@@ -357,6 +357,7 @@ struct Opts
 	int ScaleX = 1;
 	int ScaleY = 1;
 	bool AspectScale = true;
+	bool Verbose = false;
 
 	bool ParseClip(_TCHAR *clipstr);
 	void SortClips();
