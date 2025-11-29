@@ -763,6 +763,10 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 				return NULL;
 			}
 			UnpackBody(planes, header, chunk->GetLen(), chunk->GetData());
+			if (anhdread)
+			{
+				planes->Delay = anheader.reltime;
+			}
 			break;
 
 		case ID_DLTA:
