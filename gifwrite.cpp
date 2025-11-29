@@ -83,7 +83,7 @@ void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const Ch
 
 GIFWriter::GIFWriter(const Opts &opts)
 	: BaseFilename(opts.OutPathname), SoloMode(opts.SoloMode), ForcedFrameRate(opts.ForcedRate > 0),
-	  DiffusionMode(opts.DiffusionMode), Clips(opts.Clips)
+	  DiffusionMode(opts.DiffusionMode), Timing(opts.Timing), Clips(opts.Clips)
 {
 	if (opts.ForcedRate > 0)
 	{
@@ -121,7 +121,7 @@ bool GIFWriter::FinishFile()
 		// for looping purposes. (ANIM delays the start of this frame,
 		// but GIF delays the start of the next frame.)
 		auto oldframe = WriteQueue.MostRecent();
-		if (oldframe != nullptr)
+		if (oldframe != nullptr && Timing != TimingMode::SameFrame)
 		{
 			AddDelay(oldframe, FirstDelay);
 		}
@@ -354,13 +354,20 @@ void GIFWriter::MakeFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky, con
 		newframe.GCE.Flags = 1;
 		newframe.GCE.TransparentColor = bitmap->TransparentColor;
 	}
+	if (Timing == TimingMode::SameFrame)
+	{
+		AddDelay(&newframe, bitmap->Delay);
+	}
 	// Update properties on the preceding frame that couldn't be determined
 	// until this frame.
 	oldframe = WriteQueue.MostRecent();
 	if (oldframe != nullptr)
 	{
 		oldframe->GCE.Flags |= SelectDisposal(bitmap, newframe.IMD, chunky) << 2;
-		AddDelay(oldframe, bitmap->Delay);
+		if (Timing != TimingMode::SameFrame)
+		{
+			AddDelay(oldframe, bitmap->Delay);
+		}
 	}
 	// Check for a palette different from the one we recorded for the global color table.
 	// Unlike ANIMs, where a CMAP chunk in one frame applies to that frame and all

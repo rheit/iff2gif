@@ -346,18 +346,26 @@ private:
 	std::vector<PlanarBitmap> FirstFrames;		// For checking if we really want to drop frames
 };
 
+enum class TimingMode : uint8_t
+{
+	Auto,
+	PrevFrame,	// Standard ANIM is PrevFrame
+	SameFrame,
+};
+
 // Command Line options
 struct Opts
 {
 	std::vector<std::pair<unsigned, unsigned>> Clips;
 	tstring OutPathname;
 	bool SoloMode = false;
+	bool AspectScale = true;
+	bool Verbose = false;
+	TimingMode Timing = TimingMode::Auto;
 	int ForcedRate = 0;
 	int DiffusionMode = 1;
 	int ScaleX = 1;
 	int ScaleY = 1;
-	bool AspectScale = true;
-	bool Verbose = false;
 
 	bool ParseClip(_TCHAR *clipstr);
 	void SortClips();
@@ -370,6 +378,7 @@ public:
 	~GIFWriter();
 
 	void AddFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky);
+	void SetTimingMode(TimingMode timing) { Timing = timing; }
 
 private:
 	FILE *File = nullptr;
@@ -386,6 +395,7 @@ private:
 	Palette GlobalPal;
 	bool ForcedFrameRate;
 	int DiffusionMode = 0;
+	TimingMode Timing;
 	std::vector<std::pair<unsigned, unsigned>> Clips;
 
 	bool SoloMode = false;
@@ -411,6 +421,6 @@ private:
 
 #define ID_PP20 MAKE_ID('P','P','2','0')
 
-void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, const Opts &options);
+void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, Opts &options);
 std::unique_ptr<uint8_t[]> LoadPowerPackerFile(std::istream &file, size_t filesize, unsigned &unpackedsize);
 void rotate8x8(unsigned char *src, int srcstep, unsigned char *dst, int dststep);

@@ -607,7 +607,7 @@ static void PrintANHD(const AnimHeader &anhd)
 	printf("  bits: %02x\n", anhd.bits);
 }
 
-static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool verbose)
+static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], Opts &options)
 {
 	PlanarBitmap *planes = nullptr;
 	BitmapHeader header;
@@ -618,6 +618,9 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 	int numframes = 0;
 	uint32_t modeid = 0;
 	Palette palette;
+	uint16_t dpi_x = 0;
+	uint16_t dpi_y = 0;
+	bool converted_colors = false;
 
 	while (form.NextChunk(&chunk, NULL))
 	{
@@ -639,7 +642,7 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 			header.yAspect = bhdr->yAspect;
 			header.pageWidth = BigShort(bhdr->pageWidth);
 			header.pageHeight = BigShort(bhdr->pageHeight);
-			if (verbose)
+			if (options.Verbose)
 			{
 				PrintBMHD(header);
 			}
@@ -672,7 +675,7 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 			anheader.reltime = BigLong(*(uint32_t *)(ahdr + 14));
 			anheader.interleave = ahdr[18];
 			anheader.bits = BigLong(*(uint32_t *)(ahdr + 20));
-			if (verbose)
+			if (options.Verbose)
 			{
 				PrintANHD(anheader);
 			}
@@ -684,29 +687,43 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 			break;
 		}
 
+		case ID_DPI:
+		{
+			const uint16_t *dpiData = (const uint16_t *)chunk->GetData();
+			dpi_x = BigShort(dpiData[0]);
+			dpi_y = BigShort(dpiData[1]);
+			if (options.Verbose)
+			{
+				printf("DPI chunk: %d x %d\n", dpi_x, dpi_y);
+			}
+			break;
+		}
+
 		case ID_CMAP:
 		{
 			int palsize = (chunk->GetLen() + 2) / 3;	// support truncated palettes
 			palette.resize(palsize);
 			memcpy(&palette[0], chunk->GetData(), chunk->GetLen());
-			if (verbose)
+			if (options.Verbose)
 			{
 				printf("CMAP chunk with %d entries\n", palsize);
 			}
 			if (CheckOCSPalette(palette))
 			{
-				if (verbose)
+
+				if (options.Verbose)
 				{
 					printf("Palette converted from 444 to 888\n");
 				}
 				palette.FixOCS();
+				converted_colors = true;
 			}
 			break;
 		}
 
 		case ID_CAMG:
 			modeid = BigLong(*(const uint32_t *)chunk->GetData());
-			if (verbose)
+			if (options.Verbose)
 			{
 				printf("CAMG Mode ID %08x\n", modeid);
 			}
@@ -714,7 +731,7 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 
 		case ID_DEST:
 			// FIXME: DEST chunks should not be ignored.
-			if (verbose)
+			if (options.Verbose)
 			{
 				printf("Ignoring DEST chunk\n");
 			}
@@ -736,7 +753,7 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 			// ever be considered a hint. You should still read as many
 			// frames as you can.
 			numframes = BigShort(dpan->nframes);
-			if (verbose)
+			if (options.Verbose)
 			{
 				printf("DPAN chunk:");
 				printf("  version: %d\n", LittleShort(dpan->version));
@@ -793,8 +810,9 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 			planes = ApplyDelta(planes, &anheader, chunk->GetLen(), chunk->GetData());
 			break;
 
+
 		default:
-			if (verbose)
+			if (options.Verbose)
 			{
 				printf("Ignoring unknown chunk %c%c%c%c\n",
 					chunk->GetID() & 255, (chunk->GetID() >> 8) & 255, (chunk->GetID() >> 16) & 255, chunk->GetID() >> 24);
@@ -803,7 +821,7 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 		}
 		delete chunk;
 	}
-	if (planes != NULL)
+	if (planes != nullptr)
 	{
 		// Check for bogus CAMG like some brushes have, with junk in
 		// upper word and extended bit NOT set in lower word.
@@ -832,9 +850,35 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool v
 			planes->Rate = speed;
 		}
 		planes->NumFrames = numframes;
+		if (options.Timing == TimingMode::Auto)
+		{
+			// Once we have all the data for the first frame, it's time to decide
+			// which timing mode to use. We try to detect Personal Paint using
+			// characteristics from the sample file provided in GitHub issue #4.
+			// PPaint is using GIF-like timings where the relative delay is the
+			// delay to show the next frame, *not* the delay to show this frame,
+			// which is what the specs states it should be. Unfortunately, there's
+			// no definitive flag that says what way we should be doing it, so we
+			// look for characteristics that are unlikely to be true of ANIMs
+			// written by older writers.
+			if (anhdread && anheader.reltime != 0 && !converted_colors &&
+				header.xAspect == 1 && header.yAspect == 1 &&
+				dpi_x == 1 && dpi_y == 1)
+			{
+				options.Timing = TimingMode::SameFrame;
+			}
+			else
+			{
+				options.Timing = TimingMode::PrevFrame;
+			}
+			if (options.Verbose)
+			{
+				printf("Timing mode deduced to be %s frame\n", options.Timing == TimingMode::SameFrame ? "same" : "previous");
+			}
+		}
 		return planes;
 	}
-	return NULL;
+	return nullptr;
 }
 
 static void AddFrame(GIFWriter &writer, PlanarBitmap *bitmap, const Opts &options)
@@ -869,10 +913,11 @@ static void AddFrame(GIFWriter &writer, PlanarBitmap *bitmap, const Opts &option
 			chunky = chunky.HAM8toRGB(bitmap->Palette);
 		}
 	}
+	writer.SetTimingMode(options.Timing);
 	writer.AddFrame(bitmap, std::move(chunky));
 }
 
-static void LoadANIM(FORMReader &form, GIFWriter &writer, const Opts &options)
+static void LoadANIM(FORMReader &form, GIFWriter &writer, Opts &options)
 {
 	FORMReader *chunk;
 	PlanarBitmap *history[2] = { NULL, NULL };
@@ -882,7 +927,7 @@ static void LoadANIM(FORMReader &form, GIFWriter &writer, const Opts &options)
 		if (chunk->GetID() == ID_ILBM)
 		{
 			PlanarBitmap *planar;
-			while (NULL != (planar = LoadILBM(*chunk, history, options.Verbose)))
+			while (NULL != (planar = LoadILBM(*chunk, history, options)))
 			{
 				AddFrame(writer, planar, options);
 				if (history[0] == NULL)
@@ -943,7 +988,7 @@ struct membuf : std::streambuf
 };
 
 
-void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, const Opts &options)
+void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, Opts &options)
 {
 	uint32_t id = 0;
 
@@ -970,7 +1015,7 @@ void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, const Opt
 		uint32_t id = iff.GetID();
 		if (id == ID_ILBM)
 		{
-			PlanarBitmap *planar = LoadILBM(iff, nullptr, options.Verbose);
+			PlanarBitmap *planar = LoadILBM(iff, nullptr, options);
 			if (planar != NULL)
 			{
 				AddFrame(writer, planar, options);

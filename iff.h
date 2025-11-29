@@ -59,6 +59,7 @@ typedef uint16_t SpritePrecedence;	/* relative precedence, 0 is the highest*/
 #define ID_CAMG		MAKE_ID('C','A','M','G')
 #define ID_BODY		MAKE_ID('B','O','D','Y')
 #define ID_ANNO		MAKE_ID('A','N','N','O')
+#define ID_DPI 		MAKE_ID('D','P','I',' ')
 
 /* values for AnimHeader bits (mostly just for mode 4) */
 #define ANIM_LONG_DATA	1	/* else short */
