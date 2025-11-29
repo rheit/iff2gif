@@ -15,6 +15,8 @@
 ** You should have received a copy of the GNU General Public License
 ** along with iff2gif. If not, see <http://www.gnu.org/licenses/>.
 */
+#ifndef TYPES_H_
+#define TYPES_H_ 1
 
 #include <stdlib.h>
 
@@ -61,7 +63,7 @@ extern "C" {
 typedef std::basic_string<_TCHAR> tstring;
 
 template <typename T, std::size_t N>
-constexpr std::size_t countof(T const (&)[N]) noexcept
+static inline constexpr std::size_t countof(T const (&)[N]) noexcept
 {
 	return N;
 }
@@ -219,3 +221,5 @@ inline int BigLong(int x)
 #define MAKE_ID(a,b,c,d)	((d)|((c)<<8)|((b)<<16)|((a)<<24))
 #endif
 
+
+#endif // TYPES_H_

@@ -54,7 +54,7 @@ static int usage(_TCHAR *progname)
 	return 1;
 }
 
-static bool parseclip(std::vector<std::pair<unsigned, unsigned>> &clips, _TCHAR *clipstr)
+bool Opts::ParseClip(_TCHAR *clipstr)
 {
 	// Split into comma-seperated values
 	for (_TCHAR *tok = _tcstok(clipstr, _T(",")); tok != nullptr; tok = _tcstok(nullptr, _T(",")))
@@ -79,23 +79,23 @@ static bool parseclip(std::vector<std::pair<unsigned, unsigned>> &clips, _TCHAR 
 			_ftprintf(stderr, _T("Start of range must come before the end\n"));
 			return false;
 		}
-		clips.push_back(std::make_pair(start, end));
+		Clips.push_back(std::make_pair(start, end));
 	}
 	return true;
 }
 
-void sortclips(std::vector<std::pair<unsigned, unsigned>> &clips)
+void Opts::SortClips()
 {
 	// Sort by start frame.
-	std::sort(begin(clips), end(clips));
+	std::sort(begin(Clips), end(Clips));
 
 	// Now check for overlapping or abutting ranges and combine them.
-	for (size_t i = 1; i < clips.size(); ++i)
+	for (size_t i = 1; i < Clips.size(); ++i)
 	{
-		if (clips[i - 1].second >= clips[i].first - 1)
+		if (Clips[i - 1].second >= Clips[i].first - 1)
 		{
-			clips[i - 1].second = std::max(clips[i - 1].second, clips[i].second);
-			clips.erase(begin(clips) + i);
+			Clips[i - 1].second = std::max(Clips[i - 1].second, Clips[i].second);
+			Clips.erase(begin(Clips) + i);
 			// Backup since we deleted an element and need to recheck entry i.
 			--i;
 		}
@@ -106,56 +106,50 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 	_TCHAR *inparm;
 	std::ifstream infile;
-	tstring outstring;
 	int opt;
-	bool solomode = false;
-	int forcedrate = 0;
-	int diffusionmode = 1;
-	int scalex = 1, scaley = 1;
-	bool aspectscale = true;
-	std::vector<std::pair<unsigned, unsigned>> clips;
+	Opts options;
 
 	while ((opt = getopt(argc, argv, "fr:c:x:y:s:nd:")) != -1)
 	{
 		switch (opt)
 		{
 		case 'f':
-			solomode = true;
+			options.SoloMode = true;
 			break;
 		case 'r':
-			forcedrate = _ttoi(optarg);
+			options.ForcedRate = _ttoi(optarg);
 			break;
 		case 'c':
-			if (!parseclip(clips, optarg))
+			if (!options.ParseClip(optarg))
 				return 1;
 			break;
 		case 'x':
-			scalex = _ttoi(optarg);
+			options.ScaleX = _ttoi(optarg);
 			break;
 		case 'y':
-			scaley = _ttoi(optarg);
+			options.ScaleY = _ttoi(optarg);
 			break;
 		case 's':
-			scalex = scaley = _ttoi(optarg);
+			options.ScaleX = options.ScaleY = _ttoi(optarg);
 			break;
 		case 'n':
-			aspectscale = false;
+			options.AspectScale = false;
 			break;
 		case 'd':
-			diffusionmode = _ttoi(optarg);
+			options.DiffusionMode = _ttoi(optarg);
 			break;
 		default:
 			return usage(argv[0]);
 		}
 	}
 
-	if (scalex < 1 || scaley < 1)
+	if (options.ScaleX < 1 || options.ScaleY < 1)
 	{
 		_ftprintf(stderr, _T("Scale must be at least 1\n"));
 		return 1;
 	}
 
-	sortclips(clips);
+	options.SortClips();
 
 	if (optind >= argc)
 	{
@@ -170,28 +164,28 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 	if (optind + 1 < argc)
 	{
-		outstring = argv[optind + 1];
+		options.OutPathname = argv[optind + 1];
 	}
 	else
 	{
-		outstring = inparm;
+		options.OutPathname = inparm;
 
 		// Strip off the existing extension if it's 4 or fewer characters.
-		auto stop = outstring.find_last_of(_T('.'));
+		auto stop = options.OutPathname.find_last_of(_T('.'));
 		if (stop != tstring::npos)
 		{
-			size_t extlen = outstring.size() - stop - 1;
+			size_t extlen = options.OutPathname.size() - stop - 1;
 			// "Real" extensions don't start with a space character
-			if (extlen > 0 && extlen <= 4 && outstring[stop + 1] != _T(' '))
+			if (extlen > 0 && extlen <= 4 && options.OutPathname[stop + 1] != _T(' '))
 			{
-				outstring.resize(stop);
+				options.OutPathname.resize(stop);
 			}
 		}
 		// Append the .gif extension to the input name.
-		outstring += _T(".gif");
+		options.OutPathname += _T(".gif");
 	}
-	GIFWriter writer(outstring, solomode, forcedrate, clips, diffusionmode);
-	LoadFile(argv[1], infile, writer, scalex, scaley, aspectscale);
+	GIFWriter writer(options);
+	LoadFile(argv[1], infile, writer, options);
 	return 0;
 }
 

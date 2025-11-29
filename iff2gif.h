@@ -135,7 +135,7 @@ public:
 	~ChunkyBitmap();
 
 	bool operator==(ChunkyBitmap& o) noexcept;
-	bool IsEmpty() noexcept { return Pixels == nullptr; }
+	bool IsEmpty() const noexcept { return Pixels == nullptr; }
 	void Clear(bool release=true) noexcept;
 	void SetSolidColor(int color) noexcept;
 
@@ -176,9 +176,9 @@ public:
 	IFFChunk(std::istream &file, uint32_t id, uint32_t len);
 	~IFFChunk();
 
-	uint32_t GetID() { return ChunkID; }
-	uint32_t GetLen() { return ChunkLen; }
-	const void *GetData() { return ChunkData; }
+	uint32_t GetID() const noexcept { return ChunkID; }
+	uint32_t GetLen() const noexcept { return ChunkLen; }
+	const void *GetData() const noexcept { return ChunkData; }
 
 private:
 	uint32_t ChunkID;
@@ -346,11 +346,26 @@ private:
 	std::vector<PlanarBitmap> FirstFrames;		// For checking if we really want to drop frames
 };
 
+// Command Line options
+struct Opts
+{
+	std::vector<std::pair<unsigned, unsigned>> Clips;
+	tstring OutPathname;
+	bool SoloMode = false;
+	int ForcedRate = 0;
+	int DiffusionMode = 1;
+	int ScaleX = 1;
+	int ScaleY = 1;
+	bool AspectScale = true;
+
+	bool ParseClip(_TCHAR *clipstr);
+	void SortClips();
+};
+
 class GIFWriter
 {
 public:
-	GIFWriter(tstring filename, bool solo, int forcedrate,
-		std::vector<std::pair<unsigned, unsigned>> &clips, int diffusionmode);
+	GIFWriter(const Opts &options);
 	~GIFWriter();
 
 	void AddFrame(const PlanarBitmap *bitmap, ChunkyBitmap &&chunky);
@@ -395,6 +410,6 @@ private:
 
 #define ID_PP20 MAKE_ID('P','P','2','0')
 
-void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, int scalex, int scaley, bool aspectscale);
+void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, const Opts &options);
 std::unique_ptr<uint8_t[]> LoadPowerPackerFile(std::istream &file, size_t filesize, unsigned &unpackedsize);
 void rotate8x8(unsigned char *src, int srcstep, unsigned char *dst, int dststep);

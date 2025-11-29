@@ -81,17 +81,16 @@ private:
 void LZWCompress(std::vector<uint8_t> &vec, const ImageDescriptor &imd, const ChunkyBitmap &cbprev,
 	const ChunkyBitmap &chunky, uint8_t mincodesize, int trans);
 
-GIFWriter::GIFWriter(tstring filename, bool solo, int forcedrate,
-	std::vector<std::pair<unsigned, unsigned>> &clips, int diffusion)
-	: BaseFilename(filename), SoloMode(solo), ForcedFrameRate(forcedrate > 0),
-	  DiffusionMode(diffusion), Clips(clips)
+GIFWriter::GIFWriter(const Opts &opts)
+	: BaseFilename(opts.OutPathname), SoloMode(opts.SoloMode), ForcedFrameRate(opts.ForcedRate > 0),
+	  DiffusionMode(opts.DiffusionMode), Clips(opts.Clips)
 {
-	if (forcedrate > 0)
+	if (opts.ForcedRate > 0)
 	{
-		FrameRate = forcedrate;
+		FrameRate = opts.ForcedRate;
 	}
 	memset(&LSD, 0, sizeof(LSD));
-	if (solo)
+	if (opts.SoloMode)
 	{
 		CheckForIndexSpot();
 	}
