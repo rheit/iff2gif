@@ -19,12 +19,12 @@
 #include <stdio.h>
 #include <string>
 #include <fstream>
+#include <algorithm>
 #include "iff2gif.h"
 
-#if defined(__linux__) or defined(__MACH__)
+#if defined(__linux__) || defined(__MACH__)
 #include <cstring>
 #include <climits>
-#include <algorithm>
 #include <getopt.h>
 
 #undef _tcspbrk
@@ -195,7 +195,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	return 0;
 }
 
-#if defined(__linux__) or defined(__MACH__)
+#if defined(__linux__) || defined(__MACH__)
 int main(int argc, char *argv[])
 {
 	return _tmain(argc, argv);
