@@ -189,7 +189,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		options.OutPathname += _T(".gif");
 	}
 	GIFWriter writer(options);
-	LoadFile(argv[1], infile, writer, options);
+	LoadFile(inparm, infile, writer, options);
 	return 0;
 }
 
