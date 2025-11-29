@@ -173,7 +173,7 @@ static bool CheckOCSPalette(const Palette &pal)
 	return i == pal.size();
 }
 
-void UnpackBody(PlanarBitmap *planes, BitmapHeader &header, uint32_t len, const void *data)
+static void UnpackBody(PlanarBitmap *planes, BitmapHeader &header, uint32_t len, const void *data)
 {
 	const int8_t *in = (const int8_t *)data;
 	//const int8_t *end = in + len;
@@ -235,7 +235,7 @@ void UnpackBody(PlanarBitmap *planes, BitmapHeader &header, uint32_t len, const 
 }
 
 // Byte vertical delta: Probably the most common case by far
-void Delta5(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
+static void Delta5(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
 	const uint32_t *planes = (const uint32_t *)delta;
 	int numcols = (bitmap->Width + 7) / 8;
@@ -293,7 +293,7 @@ void Delta5(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *de
 }
 
 // Short vertical delta using separate op and data lists
-void Delta7Short(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
+static void Delta7Short(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
 	const uint32_t *lists = (const uint32_t *)delta;
 	int numcols = (bitmap->Width + 15) / 16;
@@ -352,7 +352,7 @@ void Delta7Short(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const voi
 }
 
 // Long vertical delta using separate op and data lists
-void Delta7Long(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
+static void Delta7Long(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
 	// ILBMs are only padded to 16 pixel widths, so what happens when the image
 	// needs to be padded to 32 pixels for long data but isn't? The spec doesn't say.
@@ -413,7 +413,7 @@ void Delta7Long(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void
 }
 
 // Short vertical delta using merged op and data lists, like op 5.
-void Delta8Short(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
+static void Delta8Short(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
 	const uint32_t *planes = (const uint32_t *)delta;
 	int numcols = (bitmap->Width + 15) / 16;
@@ -479,7 +479,7 @@ static const uint16_t *Do8short(uint16_t *pixel, uint16_t *stop, const uint16_t 
 // Long vertical delta using merged op and data lists, like op 5.
 // The final column uses shorts instead of longs if the bitmap is
 // not an even number of 16-bit words wide.
-void Delta8Long(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
+static void Delta8Long(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, const void *delta)
 {
 	const uint32_t *planes = (const uint32_t *)delta;
 	int numcols = (bitmap->Width + 31) / 32;
@@ -581,7 +581,7 @@ PlanarBitmap *ApplyDelta(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, c
 	return bitmap;
 }
 
-PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
+static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 {
 	PlanarBitmap *planes = nullptr;
 	BitmapHeader header;
@@ -770,10 +770,13 @@ PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 	return NULL;
 }
 
-static void AddFrame(GIFWriter &writer, PlanarBitmap *bitmap, int scalex, int scaley, bool aspectscale)
+static void AddFrame(GIFWriter &writer, PlanarBitmap *bitmap, const Opts &options)
 {
+    int scalex = options.ScaleX;
+    int scaley = options.ScaleY;
+
 	// Do aspect ratio correction for appropriate ModeIDs.
-	if (aspectscale)
+	if (options.AspectScale)
 	{
 		switch (bitmap->ModeID & (LACE | HIRES | SUPERHIRES))
 		{
@@ -802,7 +805,7 @@ static void AddFrame(GIFWriter &writer, PlanarBitmap *bitmap, int scalex, int sc
 	writer.AddFrame(bitmap, std::move(chunky));
 }
 
-static void LoadANIM(FORMReader &form, GIFWriter &writer, int scalex, int scaley, bool aspectscale)
+static void LoadANIM(FORMReader &form, GIFWriter &writer, const Opts &options)
 {
 	FORMReader *chunk;
 	PlanarBitmap *history[2] = { NULL, NULL };
@@ -814,7 +817,7 @@ static void LoadANIM(FORMReader &form, GIFWriter &writer, int scalex, int scaley
 			PlanarBitmap *planar;
 			while (NULL != (planar = LoadILBM(*chunk, history)))
 			{
-				AddFrame(writer, planar, scalex, scaley, aspectscale);
+				AddFrame(writer, planar, options);
 				if (history[0] == NULL)
 				{ // This was the first frame. Duplicate it for double buffering.
 					history[0] = planar;
@@ -873,7 +876,7 @@ struct membuf : std::streambuf
 };
 
 
-void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, int scalex, int scaley, bool aspectscale)
+void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, const Opts &options)
 {
 	uint32_t id = 0;
 
@@ -888,7 +891,7 @@ void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, int scale
 
 			membuf sbuf((char *)unpacked.get(), (char *)unpacked.get() + unpackedsize);
 			std::istream unppfile(&sbuf);
-			LoadFile(filename, unppfile, writer, scalex, scaley, aspectscale);
+			LoadFile(filename, unppfile, writer, options);
 			return;
 		}
 		if (id != ID_FORM)
@@ -903,13 +906,13 @@ void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, int scale
 			PlanarBitmap *planar = LoadILBM(iff, NULL);
 			if (planar != NULL)
 			{
-				AddFrame(writer, planar, scalex, scaley, aspectscale);
+				AddFrame(writer, planar, options);
 				delete planar;
 			}
 		}
 		else if (id == ID_ANIM)
 		{
-			LoadANIM(iff, writer, scalex, scaley, aspectscale);
+			LoadANIM(iff, writer, options);
 		}
 		else
 		{

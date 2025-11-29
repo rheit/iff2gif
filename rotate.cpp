@@ -26,7 +26,7 @@ Note that by setting dststep = 1, eight 1-bit rows (1 scanline of an
 typedef unsigned int bit32;
 
 #define table( name, n ) \
-   static bit32 name[ 16 ] = { \
+   static const bit32 name[ 16 ] = { \
       static_cast<bit32>(0x00000000<<n),static_cast<bit32>(0x00000001<<n),static_cast<bit32>(0x00000100<<n),static_cast<bit32>(0x00000101<<n), \
       static_cast<bit32>(0x00010000<<n),static_cast<bit32>(0x00010001<<n),static_cast<bit32>(0x00010100<<n),static_cast<bit32>(0x00010101<<n), \
       static_cast<bit32>(0x01000000<<n),static_cast<bit32>(0x01000001<<n),static_cast<bit32>(0x01000100<<n),static_cast<bit32>(0x01000101<<n), \
