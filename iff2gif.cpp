@@ -49,6 +49,7 @@ static int usage(_TCHAR *progname)
 "    -x <x scale>     Scale image horizontally. Must be at least 1.\n"
 "    -y <y scale>     Scale image vertically. Must be at least 1.\n"
 "    -s <scale>       Set both horizontal and vertical scale.\n"
+"    -v               Print more verbose output.\n"
 ),
 		progname);
 	return 1;
@@ -109,7 +110,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	int opt;
 	Opts options;
 
-	while ((opt = getopt(argc, argv, "fr:c:x:y:s:nd:")) != -1)
+	while ((opt = getopt(argc, argv, "fr:c:x:y:s:nd:v")) != -1)
 	{
 		switch (opt)
 		{
@@ -137,6 +138,9 @@ int _tmain(int argc, _TCHAR* argv[])
 			break;
 		case 'd':
 			options.DiffusionMode = _ttoi(optarg);
+			break;
+		case 'v':
+			options.Verbose = true;
 			break;
 		default:
 			return usage(argv[0]);

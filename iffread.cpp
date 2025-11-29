@@ -91,7 +91,7 @@ FORMReader::~FORMReader()
 // Returns the next chunk in the FORM. This may be either a data chunk
 // or another FORM. The appropriate pointer is filled accordingly, while
 // the other is set to NULL. The returned object should be deleted before
-// the calling NextChunk on this FORM again.
+// calling NextChunk on this FORM again.
 //
 // Returns false when the end of the FORM has been reached.
 //
@@ -581,7 +581,33 @@ PlanarBitmap *ApplyDelta(PlanarBitmap *bitmap, AnimHeader *head, uint32_t len, c
 	return bitmap;
 }
 
-static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
+static void PrintBMHD(const BitmapHeader &bmhd)
+{
+	printf("BMHD chunk:\n");
+	printf("  size: %d x %d\n", bmhd.w, bmhd.h);
+	printf("  position: (%d, %d)\n", bmhd.x, bmhd.y);
+	printf("  nPlanes: %d\n", bmhd.nPlanes);
+	printf("  masking: %02x\n", bmhd.masking);
+	printf("  compression: %d\n", bmhd.compression);
+	printf("  transparent color: %d\n", bmhd.transparentColor);
+	printf("  x,y aspect: %d, %d\n", bmhd.xAspect, bmhd.yAspect);
+	printf("  page size: %d x %d\n", bmhd.pageWidth, bmhd.pageHeight);
+}
+
+static void PrintANHD(const AnimHeader &anhd)
+{
+	printf("ANHD chunk:\n");
+	printf("  operation: %d\n", anhd.operation);
+	printf("  mask: %02x\n", anhd.mask);
+	printf("  size: %d x %d\n", anhd.w, anhd.h);
+	printf("  position: (%d, %d)\n", anhd.x, anhd.y);
+	printf("  abstime: %u\n", anhd.abstime);
+	printf("  reltime: %u\n", anhd.reltime);
+	printf("  interleave: %d\n", anhd.interleave);
+	printf("  bits: %02x\n", anhd.bits);
+}
+
+static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], bool verbose)
 {
 	PlanarBitmap *planes = nullptr;
 	BitmapHeader header;
@@ -613,6 +639,10 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			header.yAspect = bhdr->yAspect;
 			header.pageWidth = BigShort(bhdr->pageWidth);
 			header.pageHeight = BigShort(bhdr->pageHeight);
+			if (verbose)
+			{
+				PrintBMHD(header);
+			}
 			if (header.nPlanes == 0 ||
 				(header.nPlanes > 8 && header.nPlanes != 24 && header.nPlanes != 32))
 			{
@@ -642,6 +672,10 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			anheader.reltime = BigLong(*(uint32_t *)(ahdr + 14));
 			anheader.interleave = ahdr[18];
 			anheader.bits = BigLong(*(uint32_t *)(ahdr + 20));
+			if (verbose)
+			{
+				PrintANHD(anheader);
+			}
 			if (anheader.interleave > 2)
 			{
 				fprintf(stderr, "Frame interleave of %u is more than 2\n", anheader.interleave);
@@ -655,8 +689,16 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			int palsize = (chunk->GetLen() + 2) / 3;	// support truncated palettes
 			palette.resize(palsize);
 			memcpy(&palette[0], chunk->GetData(), chunk->GetLen());
+			if (verbose)
+			{
+				printf("CMAP chunk with %d entries\n", palsize);
+			}
 			if (CheckOCSPalette(palette))
 			{
+				if (verbose)
+				{
+					printf("Palette converted from 444 to 888\n");
+				}
 				palette.FixOCS();
 			}
 			break;
@@ -664,10 +706,18 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 
 		case ID_CAMG:
 			modeid = BigLong(*(const uint32_t *)chunk->GetData());
+			if (verbose)
+			{
+				printf("CAMG Mode ID %08x\n", modeid);
+			}
 			break;
 
 		case ID_DEST:
 			// FIXME: DEST chunks should not be ignored.
+			if (verbose)
+			{
+				printf("Ignoring DEST chunk\n");
+			}
 			break;
 
 		case ID_ANNO:
@@ -682,10 +732,20 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			{ // probably an ANIM brush, so pretend it's 10 fps
 				speed = 10;
 			}
-			// The DPAN chunk is optional, so its nframes field can ever
-			// only be considered a hint. You should still read as many
+			// The DPAN chunk is optional, so its nframes field can only
+			// ever be considered a hint. You should still read as many
 			// frames as you can.
 			numframes = BigShort(dpan->nframes);
+			if (verbose)
+			{
+				printf("DPAN chunk:");
+				printf("  version: %d\n", LittleShort(dpan->version));
+				printf("  speed: %d", dpan->speed);
+				if (dpan->speed != speed) {
+					printf(" (used %d)", speed);
+			   }
+			   printf("\n  ");
+			}
 			printf("%u frames @ %u fps\n", numframes, dpan->speed);
 			break;
 		}
@@ -730,8 +790,11 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 			break;
 
 		default:
-			//printf("Ignoring chunk %c%c%c%c\n",
-			//	chunk->GetID() & 255, (chunk->GetID() >> 8) & 255, (chunk->GetID() >> 16) & 255, chunk->GetID() >> 24);
+			if (verbose)
+			{
+				printf("Ignoring unknown chunk %c%c%c%c\n",
+					chunk->GetID() & 255, (chunk->GetID() >> 8) & 255, (chunk->GetID() >> 16) & 255, chunk->GetID() >> 24);
+			}
 			break;
 		}
 		delete chunk;
@@ -772,8 +835,8 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2])
 
 static void AddFrame(GIFWriter &writer, PlanarBitmap *bitmap, const Opts &options)
 {
-    int scalex = options.ScaleX;
-    int scaley = options.ScaleY;
+	int scalex = options.ScaleX;
+	int scaley = options.ScaleY;
 
 	// Do aspect ratio correction for appropriate ModeIDs.
 	if (options.AspectScale)
@@ -815,7 +878,7 @@ static void LoadANIM(FORMReader &form, GIFWriter &writer, const Opts &options)
 		if (chunk->GetID() == ID_ILBM)
 		{
 			PlanarBitmap *planar;
-			while (NULL != (planar = LoadILBM(*chunk, history)))
+			while (NULL != (planar = LoadILBM(*chunk, history, options.Verbose)))
 			{
 				AddFrame(writer, planar, options);
 				if (history[0] == NULL)
@@ -903,7 +966,7 @@ void LoadFile(_TCHAR *filename, std::istream &file, GIFWriter &writer, const Opt
 		uint32_t id = iff.GetID();
 		if (id == ID_ILBM)
 		{
-			PlanarBitmap *planar = LoadILBM(iff, NULL);
+			PlanarBitmap *planar = LoadILBM(iff, nullptr, options.Verbose);
 			if (planar != NULL)
 			{
 				AddFrame(writer, planar, options);
