@@ -702,11 +702,33 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], Opts &
 		case ID_CMAP:
 		{
 			int palsize = (chunk->GetLen() + 2) / 3;	// support truncated palettes
+			if (palsize == 0)
+			{
+				printf("Empty CMAP chunk skipped\n");
+				break;
+			}
 			palette.resize(palsize);
 			memcpy(&palette[0], chunk->GetData(), chunk->GetLen());
 			if (options.Verbose)
 			{
 				printf("CMAP chunk with %d entries\n", palsize);
+			}
+			if (!options.AllowUniPalette)
+			{
+				// Check if every color in the CMAP chunk is the same and ignore it if so
+				ColorRegister color0{ palette[0] };
+				bool same = true;
+
+				for (int i = 1; i < palsize && same; ++i)
+				{
+					same = color0 == palette[i];
+				}
+				if (same)
+				{
+					printf("CMAP has no unique colors - Using grayscale\n");
+					palette.MakeGray();
+					break;
+				}
 			}
 			if (CheckOCSPalette(palette))
 			{

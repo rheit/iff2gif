@@ -52,6 +52,7 @@ static int usage(_TCHAR *progname)
 "    -t <timing mode> 0=Use ANIM frame delay on same GIF frame.\n"
 "                     1=Use ANIM frame delay on previous GIF frame.\n"
 "                     Any other value=Try to detect (default is 1).\n"
+"    -u               Allow unipalettes with a single color repeated.\n"
 "    -v               Print more verbose output.\n"
 ),
 		progname);
@@ -113,7 +114,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	int opt;
 	Opts options;
 
-	while ((opt = getopt(argc, argv, "fr:c:x:y:s:nd:vt:")) != -1)
+	while ((opt = getopt(argc, argv, "fnuvr:c:x:y:s:d:t:")) != -1)
 	{
 		switch (opt)
 		{
@@ -141,6 +142,9 @@ int _tmain(int argc, _TCHAR* argv[])
 			break;
 		case 'd':
 			options.DiffusionMode = _ttoi(optarg);
+			break;
+		case 'u':
+			options.AllowUniPalette = true;
 			break;
 		case 'v':
 			options.Verbose = true;

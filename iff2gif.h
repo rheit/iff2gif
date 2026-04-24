@@ -75,6 +75,9 @@ public:
 	// Create the half-bright colors in the palette.
 	void MakeEHB();
 
+	// Set the whole palette to shades of gray
+	void MakeGray();
+
 	// Find the palette entry most similar to the requested color.
 	int NearestColor(int r, int g, int b) const;
 
@@ -361,6 +364,7 @@ struct Opts
 	bool SoloMode = false;
 	bool AspectScale = true;
 	bool Verbose = false;
+	bool AllowUniPalette = false;
 	TimingMode Timing = TimingMode::Auto;
 	int ForcedRate = 0;
 	int DiffusionMode = 1;

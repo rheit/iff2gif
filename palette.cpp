@@ -86,6 +86,16 @@ void Palette::MakeEHB()
 	}
 }
 
+void Palette::MakeGray()
+{
+	const int maxPal = Pal.size() - 1;
+	int i = 0;
+	for (ColorRegister &reg : Pal)
+	{
+		reg.blue = reg.green = reg.red = uint8_t((i++ * 255) / maxPal);
+	}
+}
+
 int Palette::NearestColor(int r, int g, int b) const
 {
 	int bestcolor = 0;
