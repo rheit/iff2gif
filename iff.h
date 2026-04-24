@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 typedef uint8_t Masking;		/* Choice of masking technique. */
 
 #define mskNone					0
