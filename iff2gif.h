@@ -104,6 +104,8 @@ struct PlanarBitmap
 	uint8_t Interleave = 0;
 	int NumFrames = 0;				// A hint, not authoritative
 	int ModeID = 0;
+	uint8_t xAspect = 0;
+	uint8_t yAspect = 0;
 
 	PlanarBitmap(int w, int h, int nPlanes);
 	PlanarBitmap(const PlanarBitmap &o);
@@ -365,6 +367,7 @@ struct Opts
 	bool AspectScale = true;
 	bool Verbose = false;
 	bool AllowUniPalette = false;
+	bool PreferCAMGAspect = false;
 	TimingMode Timing = TimingMode::Auto;
 	int ForcedRate = 0;
 	int DiffusionMode = 1;

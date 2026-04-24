@@ -867,6 +867,11 @@ static PlanarBitmap *LoadILBM(FORMReader &form, PlanarBitmap *history[2], Opts &
 		{
 			planes->ModeID = modeid;
 		}
+		if (header.xAspect > 1 && header.yAspect > 1)
+		{
+			planes->xAspect = header.xAspect;
+			planes->yAspect = header.yAspect;
+		}
 		if (speed > 0)
 		{
 			planes->Rate = speed;
@@ -911,13 +916,34 @@ static void AddFrame(GIFWriter &writer, PlanarBitmap *bitmap, const Opts &option
 	// Do aspect ratio correction for appropriate ModeIDs.
 	if (options.AspectScale)
 	{
-		switch (bitmap->ModeID & (LACE | HIRES | SUPERHIRES))
+		// If the BMHD looks like it has a useful aspect ratio, use that.
+		// Otherwise, fallback on CAMG chunk.
+		if (!options.PreferCAMGAspect && bitmap->xAspect && bitmap->yAspect)
 		{
-		case LACE:				scalex *= 2; break;
-		case HIRES:				scaley *= 2; break;
-		case SUPERHIRES:		scaley *= 4; break;
-		case SUPERHIRES | LACE:	scaley *= 2; break;
+			// Round larger/smaller ratio to nearest integer
+			if (bitmap->xAspect < bitmap->yAspect)
+			{
+				scaley *= ((bitmap->yAspect * 256 / bitmap->xAspect) + 128) >> 8;
+			}
+			else
+			{
+				scalex *= ((bitmap->xAspect * 256 / bitmap->yAspect) + 128) >> 8;
+			}
 		}
+		else
+		{
+			switch (bitmap->ModeID & (LACE | HIRES | SUPERHIRES))
+			{
+			case LACE:				scalex *= 2; break;
+			case HIRES:				scaley *= 2; break;
+			case SUPERHIRES:		scaley *= 4; break;
+			case SUPERHIRES | LACE:	scaley *= 2; break;
+			}
+		}
+	}
+	if (options.Verbose)
+	{
+		printf("Frame scaling factors are X: %d, Y: %d\n", scalex, scaley);
 	}
 	ChunkyBitmap chunky(*bitmap, scalex, scaley);
 	if (bitmap->ModeID & HAM)

@@ -44,7 +44,8 @@ static int usage(_TCHAR *progname)
 "                     be replaced with the frame number. Otherwise, the\n"
 "                     frame number will be inserted before the .gif\n"
 "                     extension.\n"
-"    -n               No aspect ratio correction for (super)hires/interlace.\n"
+"    -m               Use video mode to determine aspect ratio.\n"
+"    -n               No aspect ratio correction.\n"
 "    -r <frame rate>  Override the frame rate from the ANIM.\n"
 "    -x <x scale>     Scale image horizontally. Must be at least 1.\n"
 "    -y <y scale>     Scale image vertically. Must be at least 1.\n"
@@ -114,7 +115,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	int opt;
 	Opts options;
 
-	while ((opt = getopt(argc, argv, "fnuvr:c:x:y:s:d:t:")) != -1)
+	while ((opt = getopt(argc, argv, "fnmuvr:c:x:y:s:d:t:")) != -1)
 	{
 		switch (opt)
 		{
@@ -139,6 +140,9 @@ int _tmain(int argc, _TCHAR* argv[])
 			break;
 		case 'n':
 			options.AspectScale = false;
+			break;
+		case 'm':
+			options.PreferCAMGAspect = true;
 			break;
 		case 'd':
 			options.DiffusionMode = _ttoi(optarg);

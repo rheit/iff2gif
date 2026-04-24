@@ -60,6 +60,8 @@ PlanarBitmap::PlanarBitmap(const PlanarBitmap &o)
 	Delay = o.Delay;
 	Rate = o.Rate;
 	ModeID = o.ModeID;
+	xAspect = o.xAspect;
+	yAspect = o.yAspect;
 
 	int realplanes = std::max(NumPlanes, 8);
 	PlaneData = new uint8_t[Pitch * Height * realplanes];
@@ -90,6 +92,8 @@ PlanarBitmap::PlanarBitmap(PlanarBitmap &&o) noexcept
 	Delay = o.Delay;
 	Rate = o.Rate;
 	ModeID = o.ModeID;
+	xAspect = o.xAspect;
+	yAspect = o.yAspect;
 	PlaneData = o.PlaneData;
 	memcpy(Planes, o.Planes, sizeof(Planes));
 
@@ -123,6 +127,8 @@ PlanarBitmap &PlanarBitmap::operator=(PlanarBitmap &&o) noexcept
 	Delay = o.Delay;
 	Rate = o.Rate;
 	ModeID = o.ModeID;
+	xAspect = o.xAspect;
+	yAspect = o.yAspect;
 	PlaneData = o.PlaneData;
 	memcpy(Planes, o.Planes, sizeof(Planes));
 
@@ -143,6 +149,8 @@ bool PlanarBitmap::operator==(const PlanarBitmap &o) noexcept
 		&& NumPlanes == o.NumPlanes
 		&& Palette == o.Palette
 		&& ModeID == o.ModeID
+		&& xAspect == o.xAspect
+		&& yAspect == o.yAspect
 
 // Don't consider non-image data when determining equality
 //		&& TransparentColor == o.TransparentColor
